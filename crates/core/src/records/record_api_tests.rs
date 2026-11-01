@@ -11,6 +11,55 @@ use crate::records::list_records::{ListOrGeoJSONResponse, ListRecordsQuery, list
 use crate::records::test_utils::*;
 use crate::test_util::*;
 
+async fn add_new_tenant_with_one_member(
+  state: &AppState,
+  email: &str,
+  template_name: &str,
+  tenant_name: &str,
+) -> (uuid::Uuid, TestUserAndLogin) {
+  let user = create_user_for_test(
+    state,
+    UserIdentifier::Email(email.to_string()),
+    "Secret!1!!",
+  )
+  .await;
+
+  let tenant_id = uuid::Uuid::from_bytes(
+    state
+      .user_conn()
+      .write_query_row_get::<[u8; 16]>(
+        "INSERT INTO _tenant (name, template) VALUES ($1, $2) RETURNING id;",
+        params!(tenant_name.to_string(), template_name.to_string()),
+        0,
+      )
+      .await
+      .unwrap()
+      .unwrap(),
+  );
+
+  state
+    .user_conn()
+    .execute(
+      "INSERT INTO _tenant_member (tenant, user) VALUES ($1, $2);",
+      params!(tenant_id.into_bytes(), user.id.into_bytes()),
+    )
+    .await
+    .unwrap();
+
+  let login =
+    login_user_with_tenant_for_test(&state, user.user.clone(), Some(tenant_id), &user.password)
+      .await
+      .unwrap();
+
+  {
+    let user = User::from_auth_token(&state, &login.auth_token).unwrap();
+    assert_eq!(tenant_id, user.tenant.as_ref().unwrap().id);
+    assert_eq!(template_name, user.tenant.as_ref().unwrap().template);
+  }
+
+  return (tenant_id, TestUserAndLogin { user, login });
+}
+
 #[tokio::test]
 async fn multi_tenant_record_api_create() {
   let config = {
@@ -28,38 +77,23 @@ async fn multi_tenant_record_api_create() {
   .await
   .unwrap();
 
-  let user_x_password = "Secret!1!!";
-  let user_x_email = "user_x@bar.com";
-  let user_x = create_user_for_test(
-    &state,
-    UserIdentifier::Email(user_x_email.to_string()),
-    user_x_password,
-  )
-  .await;
-
   const API_NAME: &str = "simple_api";
-  const TENANT_NAME: &str = "test";
   const TEMPLATE_NAME: &str = "test_template";
 
-  let tenant_id: [u8; 16] = state
-    .user_conn()
-    .write_query_row_get(
-      "INSERT INTO _tenant (name, template) VALUES ($1, $2) RETURNING id;",
-      params!(TENANT_NAME, TEMPLATE_NAME),
-      0,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-
-  state
-    .user_conn()
-    .execute(
-      "INSERT INTO _tenant_member (tenant, user) VALUES ($1, $2);",
-      params!(tenant_id, user_x.id.into_bytes()),
-    )
-    .await
-    .unwrap();
+  let (
+    tenant_x,
+    TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    },
+  ) = add_new_tenant_with_one_member(&state, "user_x@test.org", TEMPLATE_NAME, "tenant_x").await;
+  let (
+    tenant_y,
+    TestUserAndLogin {
+      user: user_y,
+      login: user_y_tokens,
+    },
+  ) = add_new_tenant_with_one_member(&state, "user_y@test.org", TEMPLATE_NAME, "tenant_y").await;
 
   let template_migrations = state
     .data_dir()
@@ -103,33 +137,11 @@ async fn multi_tenant_record_api_create() {
   .await
   .unwrap();
 
-  // Log-in with user_x, then create a record and list it.
-  let (user_x, user_x_tokens) = {
-    let tokens = login_user_with_tenant_for_test(
-      &state,
-      UserIdentifier::Email(user_x_email.to_string()),
-      Some(uuid::Uuid::from_bytes(tenant_id)),
-      user_x_password,
-    )
-    .await
-    .unwrap();
-
-    let user = User::from_auth_token(&state, &tokens.auth_token).unwrap();
-
-    assert_eq!(
-      uuid::Uuid::from_bytes(tenant_id),
-      user.tenant.as_ref().unwrap().id,
-    );
-    assert_eq!(TEMPLATE_NAME, user.tenant.as_ref().unwrap().template);
-
-    (user, tokens)
-  };
-
   let _ = create_record_handler(
     State(state.clone()),
     Path(API_NAME.to_string()),
     Query(CreateRecordQuery::default()),
-    Some(user_x.clone()),
+    Some(User::from_auth_token(&state, &user_x_tokens.auth_token).unwrap()),
     Either::Json(
       json_row_from_value(json!({
         "owner": crate::util::uuid_to_b64(&user_x.id),
@@ -147,7 +159,7 @@ async fn multi_tenant_record_api_create() {
     Path(API_NAME.to_string()),
     Query(ListRecordsQuery::default()),
     RawQuery(Some("count=TRUE".to_string())),
-    Some(user_x.clone()),
+    Some(User::from_auth_token(&state, &user_x_tokens.auth_token).unwrap()),
   )
   .await
   .unwrap()
@@ -157,4 +169,21 @@ async fn multi_tenant_record_api_create() {
   };
 
   assert_eq!(Some(1), list.total_count);
+
+  // Make sure a user off a different tenant is isolated.
+  let ListOrGeoJSONResponse::List(list) = list_records_handler(
+    State(state.clone()),
+    Path(API_NAME.to_string()),
+    Query(ListRecordsQuery::default()),
+    RawQuery(Some("count=TRUE".to_string())),
+    Some(User::from_auth_token(&state, &user_y_tokens.auth_token).unwrap()),
+  )
+  .await
+  .unwrap()
+  .0
+  else {
+    panic!("not a list");
+  };
+
+  assert_eq!(Some(0), list.total_count);
 }
