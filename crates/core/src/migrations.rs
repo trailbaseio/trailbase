@@ -112,7 +112,7 @@ pub(crate) fn apply_base_migrations(
   return apply_migrations(
     db,
     conn,
-    get_base_and_custom_migrations(custom_migrations_path.map(|p| p.join(db)).as_deref())?,
+    get_base_and_custom_migrations(custom_migrations_path)?,
   );
 }
 

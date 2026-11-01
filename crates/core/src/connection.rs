@@ -605,7 +605,11 @@ async fn init_db_sqlite<'a>(
       // Apply migrations.
       //
       // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-      apply_base_migrations(&mut secondary, Some(migrations.path), schema_name)?;
+      apply_base_migrations(
+        &mut secondary,
+        Some(&migrations.path.join(schema_name)),
+        schema_name,
+      )?;
     }
 
     conn.attach(&path.to_string_lossy(), schema_name).await?;
