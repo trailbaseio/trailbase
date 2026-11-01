@@ -14,24 +14,24 @@
   },
   "dependencies": {
     "solid-icons": "^1.2.0",
-    "solid-js": "^1.9.17",
+    "solid-js": "^1.9.18",
     "trailbase": "^0.14.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@iconify-json/tabler": "^1.2.42",
+    "@iconify-json/tabler": "^1.2.43",
     "@tailwindcss/vite": "^4.3.3",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "compression": "^1.8.2",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "express": "^5.3.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
     "sirv": "^3.0.2",
     "tailwindcss": "^4.3.3",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
-    "vite-plugin-solid": "^2.11.14"
+    "vite-plugin-solid": "^2.11.15"
   }
 }

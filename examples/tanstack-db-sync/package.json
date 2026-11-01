@@ -13,11 +13,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.11.3",
-    "@tanstack/query-core": "^5.104.5",
-    "@tanstack/query-db-collection": "^1.4.8",
-    "@tanstack/react-db": "^0.5.12",
-    "@tanstack/trailbase-db-collection": "^0.1.123",
+    "@tanstack/db": "^1.0.0-rc.1.1",
+    "@tanstack/query-core": "^5.105.0",
+    "@tanstack/query-db-collection": "^1.5.0",
+    "@tanstack/react-db": "^1.0.0-rc.1.1",
+    "@tanstack/trailbase-db-collection": "^1.0.0-rc.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.3",
@@ -29,14 +29,14 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5"
   }
 }

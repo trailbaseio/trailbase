@@ -9,8 +9,8 @@
     "build": "barrelize && vite build"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.59.4",
-    "barrelize": "^1.9.2",
+    "@microsoft/api-extractor": "^7.60.1",
+    "barrelize": "^1.11.0",
     "typescript": "=6.0.3",
     "vite": "^8.3.5",
     "vite-plugin-dts": "^5.1.2"
