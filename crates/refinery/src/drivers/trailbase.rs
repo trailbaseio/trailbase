@@ -13,6 +13,7 @@ impl AsyncTransaction for Connection {
   async fn execute<'a, T: Iterator<Item = &'a str> + Send>(
     &mut self,
     queries: T,
+    dry_run: bool,
   ) -> Result<usize, Self::Error> {
     let is_sqlite = self.connection_type() == ConnectionType::Sqlite;
     let initial_fk: bool = is_sqlite
@@ -30,10 +31,20 @@ impl AsyncTransaction for Connection {
       self.execute_batch("PRAGMA foreign_keys = OFF;").await?;
     }
 
-    let result = self
+    let count = self
       .transaction({
         let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
-        move |tx| apply_migrations(tx, &queries, initial_fk)
+        move |mut tx| -> Result<usize, Error> {
+          let count = apply_migrations(&mut tx, queries.iter().map(|s| s.as_str()), initial_fk)?;
+
+          if !dry_run {
+            tx.commit()?;
+          } else {
+            tx.rollback()?;
+          }
+
+          return Ok(count);
+        }
       })
       .await;
 
@@ -41,7 +52,7 @@ impl AsyncTransaction for Connection {
       self.execute_batch("PRAGMA foreign_keys = ON;").await?;
     }
 
-    return result;
+    return count;
   }
 }
 
@@ -97,15 +108,14 @@ pub(super) fn query_applied_migrations<C: SyncConnection>(
     .iter()
     .map(|row| {
       let version = row.get(0)?;
+      let name: String = row.get(1)?;
       let applied_on: String = row.get(2)?;
-      let applied_on =
-        OffsetDateTime::parse(&applied_on, &Rfc3339).map_err(|err| Error::Other(err.into()))?;
       let checksum: String = row.get(3)?;
 
       return Ok(Migration::applied(
         version,
-        row.get(1)?,
-        applied_on,
+        name,
+        OffsetDateTime::parse(&applied_on, &Rfc3339).map_err(|err| Error::Other(err.into()))?,
         checksum
           .parse::<u64>()
           .map_err(|err| Error::Other(err.into()))?,
@@ -115,8 +125,8 @@ pub(super) fn query_applied_migrations<C: SyncConnection>(
 }
 
 pub(super) fn apply_migrations<'a>(
-  mut tx: impl SyncTransaction,
-  queries: &[String],
+  tx: &mut impl SyncTransaction,
+  queries: impl Iterator<Item = &'a str>,
   foreign_keys: bool,
 ) -> Result<usize, Error> {
   let mut count = 0;
@@ -142,27 +152,63 @@ pub(super) fn apply_migrations<'a>(
     }
   }
 
-  tx.commit()?;
-
   return Ok(count);
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use std::fs::File;
+  use std::io::Write;
 
-  fn test<T>(_fut: impl futures_util::Future<Output = T> + Send) {}
+  use super::*;
+  use crate::load_sql_migrations;
+
+  fn write_migration(path: impl AsRef<std::path::Path>, migration: &str) {
+    let mut v0 = File::create(path).unwrap();
+    v0.write_all(migration.as_bytes()).unwrap();
+  }
 
   #[tokio::test]
   async fn trailbase_refinery_test() {
+    const V0: &str = "
+        CREATE TABLE test (
+            id     INTEGER PRIMARY KEY,
+            data   INTEGER
+        );
+        INSERT INTO test (data) VALUES (42);
+    ";
+
+    let temp_dir = temp_dir::TempDir::new().unwrap();
     let mut conn = Connection::open_in_memory().unwrap();
 
-    let runner = crate::Runner::new(&vec![]);
-    runner.run_async(&mut conn).await.unwrap();
+    write_migration(temp_dir.child("V0__initial.sql"), V0);
+    let migrations = load_sql_migrations(temp_dir.path()).unwrap();
+    assert_eq!(1, migrations.len());
 
-    test(Box::pin(async move {
-      let runner = crate::Runner::new(&vec![]);
-      return runner.run_async(&mut conn).await;
-    }));
+    {
+      let runner = crate::Runner::new(&migrations).set_dry_run(true);
+      runner.run_async(&mut conn).await.unwrap();
+
+      assert!(
+        conn
+          .read_query_row_get::<i64>("SELECT COUNT(*) FROM test", (), 0)
+          .await
+          .is_err()
+      );
+    }
+
+    {
+      let runner = crate::Runner::new(&migrations);
+      runner.run_async(&mut conn).await.unwrap();
+
+      assert_eq!(
+        1,
+        conn
+          .read_query_row_get::<i64>("SELECT COUNT(*) FROM test", (), 0)
+          .await
+          .unwrap()
+          .unwrap()
+      )
+    }
   }
 }

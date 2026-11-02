@@ -15,6 +15,7 @@ pub trait AsyncTransaction {
   async fn execute<'a, T: Iterator<Item = &'a str> + Send>(
     &mut self,
     queries: T,
+    dry_run: bool,
   ) -> Result<usize, Self::Error>;
 }
 
@@ -26,6 +27,7 @@ pub trait AsyncQuery<T>: AsyncTransaction {
 async fn migrate<T: AsyncTransaction>(
   transaction: &mut T,
   migrations: Vec<Migration>,
+  dry_run: bool,
   target: Target,
   migration_table_name: &str,
 ) -> Result<Report, Error> {
@@ -49,6 +51,7 @@ async fn migrate<T: AsyncTransaction>(
           update_query.as_str(),
         ]
         .into_iter(),
+        dry_run,
       )
       .await
       .migration_err(
@@ -63,6 +66,7 @@ async fn migrate<T: AsyncTransaction>(
 async fn migrate_grouped<T: AsyncTransaction>(
   transaction: &mut T,
   migrations: Vec<Migration>,
+  dry_run: bool,
   target: Target,
   migration_table_name: &str,
 ) -> Result<Report, Error> {
@@ -108,7 +112,7 @@ async fn migrate_grouped<T: AsyncTransaction>(
   let refs = grouped_migrations.iter().map(AsRef::as_ref);
 
   transaction
-    .execute(refs)
+    .execute(refs, dry_run)
     .await
     .migration_err("error applying migrations", None)?;
 
@@ -157,6 +161,7 @@ where
     migrations: &[Migration],
     abort_divergent: bool,
     abort_missing: bool,
+    dry_run: bool,
     grouped: bool,
     target: Target,
     migration_table_name: &str,
@@ -167,6 +172,7 @@ where
           .assert_migrations_table_query(migration_table_name)
           .as_str()]
         .into_iter(),
+        false,
       )
       .await
       .migration_err("error asserting migrations table", None)?;
@@ -188,9 +194,9 @@ where
     }
 
     if grouped || matches!(target, Target::Fake | Target::FakeVersion(_)) {
-      migrate_grouped(self, migrations, target, migration_table_name).await
+      migrate_grouped(self, migrations, dry_run, target, migration_table_name).await
     } else {
-      migrate(self, migrations, target, migration_table_name).await
+      migrate(self, migrations, dry_run, target, migration_table_name).await
     }
   }
 }

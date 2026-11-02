@@ -8,7 +8,11 @@ use crate::{Error, Migration, Report, Target};
 pub trait Transaction {
   type Error: std::error::Error + Send + Sync + 'static;
 
-  fn execute<'a, T: Iterator<Item = &'a str>>(&mut self, queries: T) -> Result<usize, Self::Error>;
+  fn execute<'a, T: Iterator<Item = &'a str>>(
+    &mut self,
+    queries: T,
+    dry_run: bool,
+  ) -> Result<usize, Self::Error>;
 }
 
 pub trait Query<T>: Transaction {
@@ -18,6 +22,7 @@ pub trait Query<T>: Transaction {
 pub fn migrate<T: Transaction>(
   transaction: &mut T,
   migrations: Vec<Migration>,
+  dry_run: bool,
   target: Target,
   migration_table_name: &str,
   grouped: bool,
@@ -67,12 +72,15 @@ pub fn migrate<T: Transaction>(
 
   if grouped {
     transaction
-      .execute(migration_batch.iter().map(|(_name, sql)| sql.as_str()))
+      .execute(
+        migration_batch.iter().map(|(_name, sql)| sql.as_str()),
+        dry_run,
+      )
       .migration_err("error applying migrations", None)?;
   } else {
     for (i, (_name, update)) in migration_batch.into_iter().enumerate() {
       transaction
-        .execute([update.as_str()].into_iter())
+        .execute([update.as_str()].into_iter(), dry_run)
         .migration_err(
           &format!("error applying update {_name}: {}", update),
           Some(&applied_migrations[0..i / 2]),
@@ -103,6 +111,7 @@ where
           .assert_migrations_table_query(migration_table_name)
           .as_str()]
         .into_iter(),
+        false,
       )
       .migration_err("error asserting migrations table", None)
   }
@@ -161,6 +170,7 @@ where
     migrations: &[Migration],
     abort_divergent: bool,
     abort_missing: bool,
+    dry_run: bool,
     grouped: bool,
     target: Target,
     migration_table_name: &str,
@@ -172,10 +182,13 @@ where
       migration_table_name,
     )?;
 
-    if grouped || matches!(target, Target::Fake | Target::FakeVersion(_)) {
-      migrate(self, migrations, target, migration_table_name, true)
-    } else {
-      migrate(self, migrations, target, migration_table_name, false)
-    }
+    return migrate(
+      self,
+      migrations,
+      dry_run,
+      target,
+      migration_table_name,
+      grouped || matches!(target, Target::Fake | Target::FakeVersion(_)),
+    );
   }
 }

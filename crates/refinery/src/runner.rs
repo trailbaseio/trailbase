@@ -224,6 +224,7 @@ pub struct Runner {
   grouped: bool,
   abort_divergent: bool,
   abort_missing: bool,
+  dry_run: bool,
   migrations: Vec<Migration>,
   target: Target,
   migration_table_name: String,
@@ -237,6 +238,7 @@ impl Runner {
       target: Target::Latest,
       abort_divergent: true,
       abort_missing: true,
+      dry_run: false,
       migrations: migrations.to_vec(),
       migration_table_name: DEFAULT_MIGRATION_TABLE_NAME.into(),
     }
@@ -287,6 +289,10 @@ impl Runner {
       abort_missing,
       ..self
     }
+  }
+
+  pub fn set_dry_run(self, dry_run: bool) -> Runner {
+    Runner { dry_run, ..self }
   }
 
   /// Queries the database for the last applied migration, returns None if there aren't applied
@@ -368,6 +374,7 @@ impl Runner {
       &self.migrations,
       self.abort_divergent,
       self.abort_missing,
+      self.dry_run,
       self.grouped,
       self.target,
       &self.migration_table_name,
@@ -384,6 +391,7 @@ impl Runner {
       &self.migrations,
       self.abort_divergent,
       self.abort_missing,
+      self.dry_run,
       self.grouped,
       self.target,
       &self.migration_table_name,
@@ -394,6 +402,7 @@ impl Runner {
 
 pub struct RunIterator<'a, C> {
   connection: &'a mut C,
+  dry_run: bool,
   target: Target,
   migration_table_name: String,
   items: VecDeque<Migration>,
@@ -416,12 +425,14 @@ where
         .unwrap(),
       ),
       connection,
+      dry_run: runner.dry_run,
       target: runner.target,
       migration_table_name: runner.migration_table_name.clone(),
       failed: false,
     }
   }
 }
+
 impl<C> Iterator for RunIterator<'_, C>
 where
   C: Migrate,
@@ -435,6 +446,7 @@ where
         sync_migrate(
           self.connection,
           vec![migration],
+          self.dry_run,
           self.target,
           &self.migration_table_name,
           false,

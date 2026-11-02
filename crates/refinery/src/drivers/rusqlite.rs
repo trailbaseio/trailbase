@@ -7,7 +7,11 @@ use crate::traits::sync::{Migrate, Query, Transaction};
 impl Transaction for RqlConnection {
   type Error = RqlError;
 
-  fn execute<'a, T: Iterator<Item = &'a str>>(&mut self, queries: T) -> Result<usize, Self::Error> {
+  fn execute<'a, T: Iterator<Item = &'a str>>(
+    &mut self,
+    queries: T,
+    dry_run: bool,
+  ) -> Result<usize, Self::Error> {
     let initial_fk: bool = self.query_one("PRAGMA foreign_keys;", (), |row| row.get(0))?;
     if initial_fk {
       // Turn off foreign key constraints temporarily (re-enabled as part of the transaction)
@@ -19,17 +23,23 @@ impl Transaction for RqlConnection {
       self.pragma_update(None, "foreign_keys", false)?;
     }
 
-    let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
-    let tx = self.transaction()?;
-    let result = apply_migrations(tx, &queries, initial_fk).map_err(|err| match err {
+    let mut tx = self.transaction()?;
+    let count = apply_migrations(&mut tx, queries, initial_fk).map_err(|err| match err {
       trailbase_sqlite::Error::Rusqlite(err) => err,
       _ => RqlError::UserFunctionError(err.into()),
     });
+
+    if !dry_run {
+      tx.commit()?;
+    } else {
+      tx.rollback()?
+    }
+
     if initial_fk {
       self.pragma_update(None, "foreign_keys", true)?;
     }
 
-    return result;
+    return count;
   }
 }
 
@@ -111,6 +121,21 @@ mod tests {
 
       let migrations = load_sql_migrations(temp_dir.path()).unwrap();
       assert_eq!(1, migrations.len());
+
+      Runner::new(&migrations)
+        .set_abort_divergent(false)
+        .set_grouped(false)
+        .set_dry_run(true)
+        .run(&mut conn)
+        .unwrap();
+
+      assert_eq!(
+        false,
+        conn
+          .query_one(INDEX_EXISTS, (), |row| row.get::<_, bool>(0))
+          .unwrap()
+      );
+
       Runner::new(&migrations)
         .set_abort_divergent(false)
         .set_grouped(false)
