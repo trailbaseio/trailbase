@@ -193,7 +193,7 @@ pub async fn record_transactions_handler(
     })
     .collect::<Result<Vec<_>, _>>()?;
 
-  let conn = ops[0].api.conn(user.as_ref()).await;
+  let conn = ops[0].api.conn(user.as_ref()).await?;
 
   let op_results = if request.transaction.unwrap_or(false) {
     conn
