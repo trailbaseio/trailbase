@@ -97,13 +97,12 @@ export default function Page() {
   });
 
   return (
-    <div class="max-md:min-h-dvh">
+    <div class="max-md:min-h-dvh md:max-h-full md:overflow-y-auto">
       <rapi-doc
         ref={
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ref as any
         }
-        load-fonts="false"
         sort-tags="true"
         render-style="view" // "read" | "view" | "focused"
         layout="row" // "row" | "column"
@@ -116,6 +115,9 @@ export default function Page() {
         persist-auth="false"
         allow-authentication="false"
         allow-server-selection="false"
+        style={{
+          "--background": theme() === "light" ? "#f8fafc" : "#121821",
+        }}
         {...(theme() === "light" ? lightTheme : darkTheme)}
       >
         {/* Contents */}
@@ -134,6 +136,8 @@ export default function Page() {
             </Popover>
           }
         />
+
+        <div class="py-1" />
       </rapi-doc>
     </div>
   );
@@ -179,22 +183,17 @@ function TokenPopoverContent(props: {
 }
 
 type Theme = {
-  theme: "light" | "dark";
-  "bg-color": string;
+  "color-scheme": "light" | "dark";
   "primary-color": string;
-  "text-color"?: string;
-  "header-color"?: string;
 };
 
 const lightTheme: Theme = {
-  theme: "light",
-  "bg-color": "#f8fafc",
+  "color-scheme": "light",
   "primary-color": "#0073a8",
 };
 
 const darkTheme: Theme = {
-  theme: "dark",
-  "bg-color": "#121821",
+  "color-scheme": "dark",
   "primary-color": "#34b7f4",
 };
 

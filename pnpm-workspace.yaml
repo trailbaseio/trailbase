@@ -32,6 +32,4 @@ overrides:
   form-data@>=4.0.0 <4.0.6: ^4.0.6
 auditConfig:
   ignoreGhsas:
-    - GHSA-ch52-4w7c-c8xp
-    - GHSA-gcqx-w48m-w2h4
-    - GHSA-g3hv-75wg-m249 # minimatch via rapidoc: client-side only.
+    # - GHSA-ch52-4w7c-c8xp  # example
