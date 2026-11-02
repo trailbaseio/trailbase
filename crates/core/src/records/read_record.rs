@@ -75,7 +75,7 @@ pub async fn read_record_handler(
 
   let mut row = api
     .conn(user.as_ref())
-    .await
+    .await?
     .call_reader({
       move |mut conn| -> Result<_, RecordError> {
         query.check_record_level_access(&mut conn, user.as_ref())?;
@@ -199,7 +199,7 @@ pub async fn get_uploaded_file_from_record_handler(
 
   let json = api
     .conn(user.as_ref())
-    .await
+    .await?
     .call_reader(move |mut conn| {
       query.check_record_level_access(&mut conn, user.as_ref())?;
       return query.read(&mut conn);
@@ -260,7 +260,7 @@ pub async fn get_uploaded_files_from_record_handler(
 
       let json = api
         .conn(user.as_ref())
-        .await
+        .await?
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
           return query.read(&mut conn);
@@ -275,7 +275,7 @@ pub async fn get_uploaded_files_from_record_handler(
 
       let json = api
         .conn(user.as_ref())
-        .await
+        .await?
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
           return query.read(&mut conn);
