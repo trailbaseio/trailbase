@@ -587,21 +587,29 @@ impl RecordApi {
   }
 
   /// Returns the DB connection serving the API call.
-  pub async fn conn(&self, user: Option<&User>) -> trailbase_sqlite::Connection {
+  pub async fn conn(
+    &self,
+    user: Option<&User>,
+  ) -> Result<trailbase_sqlite::Connection, RecordError> {
     return match &self.state.conn {
-      ApiConnection::SingleTenant(conn) => conn.clone(),
+      ApiConnection::SingleTenant(conn) => Ok(conn.clone()),
       ApiConnection::MultiTenant {
         mgr,
         tenant_template,
       } => {
-        mgr
-          .build_for_tenant(
-            &tenant_template,
-            Some(user.expect("FIXME").tenant.as_ref().expect("FIXME").id),
-          )
-          .await
-          .expect("FIXME")
-          .connection
+        let Some(tenant) = user.as_ref().and_then(|u| u.tenant.as_ref()) else {
+          return Err(RecordError::Forbidden);
+        };
+
+        Ok(
+          mgr
+            .build_for_tenant(&tenant_template, Some(tenant.id))
+            .await
+            .map_err(|err| {
+              RecordError::Internal(format!("Failed to open connection: {err}").into())
+            })?
+            .connection,
+        )
       }
     };
   }

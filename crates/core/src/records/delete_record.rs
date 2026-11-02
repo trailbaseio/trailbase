@@ -34,7 +34,7 @@ pub async fn delete_record_handler(
   api.check_table_level_access(Permission::Delete, user.as_ref())?;
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn(user.as_ref()).await;
+  let conn = api.conn(user.as_ref()).await?;
 
   let query = DeleteRecordApiQuery::new(api.clone(), record_id)?;
 

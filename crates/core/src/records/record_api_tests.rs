@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use axum::extract::{Path, Query, RawQuery, State};
 use serde_json::json;
 use trailbase_sqlite::params;
@@ -6,6 +8,7 @@ use crate::app_state::*;
 use crate::auth::User;
 use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
 use crate::extract::Either;
+use crate::records::RecordError;
 use crate::records::create_record::{CreateRecordQuery, create_record_handler};
 use crate::records::list_records::{ListOrGeoJSONResponse, ListRecordsQuery, list_records_handler};
 use crate::records::test_utils::*;
@@ -186,4 +189,27 @@ async fn multi_tenant_record_api_create() {
   };
 
   assert_eq!(Some(0), list.total_count);
+
+  // Make sure we fail if user is logged in w/o a tenant.
+  let user_x_wo_tenant = login_user_with_tenant_for_test(
+    &state,
+    user_x.user.clone(),
+    /* tenant_id =*/ None,
+    &user_x.password,
+  )
+  .await
+  .unwrap();
+
+  assert_matches!(
+    list_records_handler(
+      State(state.clone()),
+      Path(API_NAME.to_string()),
+      Query(ListRecordsQuery::default()),
+      RawQuery(Some("count=TRUE".to_string())),
+      Some(User::from_auth_token(&state, &user_x_wo_tenant.auth_token).unwrap()),
+    )
+    .await
+    .err(),
+    Some(RecordError::Forbidden)
+  );
 }
