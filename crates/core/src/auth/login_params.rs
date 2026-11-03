@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
@@ -74,12 +75,15 @@ pub(crate) fn build_and_validate_input_params(
     .tenant
     .as_deref()
     .map(|t| -> Result<_, AuthError> {
-      let uuid = uuid::Uuid::from_slice(
-        &BASE64_URL_SAFE
-          .decode(t)
-          .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
-      )
-      .map_err(|_err| AuthError::BadRequest("invalid 'tenant'"))?;
+      let uuid = match t.trim().len() {
+        36 => uuid::Uuid::from_str(t).map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
+        _ => uuid::Uuid::from_slice(
+          &BASE64_URL_SAFE
+            .decode(t)
+            .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
+        )
+        .map_err(|_err| AuthError::BadRequest("invalid 'tenant'"))?,
+      };
 
       if uuid.get_version_num() != 4 {
         return Err(AuthError::BadRequest("invalid 'tenant'"));
