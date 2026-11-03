@@ -13,13 +13,15 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
-use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
+use crate::auth::login_params::{
+  LoginInputParams, LoginParams, TenantIdentifier, build_and_validate_input_params,
+};
 use crate::auth::password::{check_user_password, sleep_for_password_check_equivalent};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
-  validate_and_normalize_email_address, validate_and_normalize_username,
+  SameSite, get_tenant_id_by_name, new_cookie, remove_cookie, user_by_email, user_by_id,
+  user_by_username, validate_and_normalize_email_address, validate_and_normalize_username,
 };
 use crate::auth::{AuthError, HasRoot};
 use crate::constants::{
@@ -215,6 +217,14 @@ pub(crate) async fn login_handler(
       redirect_uri,
       tenant,
     } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
       build_auth_token_flow_response(
         &state,
         db_user,
@@ -232,6 +242,14 @@ pub(crate) async fn login_handler(
       pkce_code_challenge,
       tenant,
     } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
       build_authorization_code_flow_and_pkce_response(
         &state,
         &db_user,
@@ -539,6 +557,14 @@ pub(crate) async fn login_mfa_handler(
       redirect_uri,
       tenant,
     } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
       build_auth_token_flow_response(
         &state,
         db_user,
@@ -556,6 +582,14 @@ pub(crate) async fn login_mfa_handler(
       pkce_code_challenge,
       tenant,
     } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
       build_authorization_code_flow_and_pkce_response(
         &state,
         &db_user,
