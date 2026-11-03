@@ -6,10 +6,12 @@ use tower_cookies::Cookies;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
+use crate::auth::login_params::{
+  LoginInputParams, LoginParams, TenantIdentifier, build_and_validate_input_params,
+};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
-use crate::auth::util::{SameSite, new_cookie};
+use crate::auth::util::{SameSite, get_tenant_id_by_name, new_cookie};
 use crate::config::proto;
 use crate::constants::COOKIE_OAUTH_STATE;
 use crate::util::uuid_to_b64;
@@ -67,30 +69,50 @@ pub(crate) async fn login_with_external_auth_provider(
     LoginParams::Password {
       redirect_uri,
       tenant,
-    } => OAuthStateClaims {
-      // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
-      exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
-      csrf_secret: csrf_state.secret().to_string(),
-      pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
-      redirect_uri,
-      response_type: None,
-      user_pkce_code_challenge: None,
-      tenant: tenant.as_ref().map(uuid_to_b64),
-    },
+    } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
+      OAuthStateClaims {
+        // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
+        exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
+        csrf_secret: csrf_state.secret().to_string(),
+        pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
+        redirect_uri,
+        response_type: None,
+        user_pkce_code_challenge: None,
+        tenant: tenant.as_ref().map(uuid_to_b64),
+      }
+    }
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
       pkce_code_challenge,
       tenant,
-    } => OAuthStateClaims {
-      // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
-      exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
-      csrf_secret: csrf_state.secret().to_string(),
-      pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
-      user_pkce_code_challenge: Some(pkce_code_challenge),
-      response_type: Some(ResponseType::Code),
-      redirect_uri: Some(redirect_uri),
-      tenant: tenant.as_ref().map(uuid_to_b64),
-    },
+    } => {
+      let tenant: Option<uuid::Uuid> = match tenant {
+        Some(TenantIdentifier::Id(id)) => Some(id),
+        Some(TenantIdentifier::Name(name)) => {
+          Some(get_tenant_id_by_name(state.user_conn(), name).await?)
+        }
+        None => None,
+      };
+
+      OAuthStateClaims {
+        // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
+        exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
+        csrf_secret: csrf_state.secret().to_string(),
+        pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
+        user_pkce_code_challenge: Some(pkce_code_challenge),
+        response_type: Some(ResponseType::Code),
+        redirect_uri: Some(redirect_uri),
+        tenant: tenant.as_ref().map(uuid_to_b64),
+      }
+    }
   };
 
   cookies.add(new_cookie(
