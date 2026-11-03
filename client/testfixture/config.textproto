@@ -37,6 +37,9 @@ jobs {}
 databases: [{
   name: "other"
 }]
+tenant_templates: [{
+  name: "test_template"
+}]
 record_apis: [{
   name: "simple_strict_table"
   table_name: "simple_strict_table"

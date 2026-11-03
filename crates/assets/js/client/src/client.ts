@@ -37,6 +37,11 @@ import type {
   TransactionResponse,
 } from "trailbase-bindings";
 
+export type Tenant = {
+  id: string;
+  template: string;
+};
+
 export type User = {
   id: string;
   email: string | null;
@@ -44,6 +49,7 @@ export type User = {
   admin?: boolean;
   mfa?: boolean;
   provider?: number;
+  tenant?: Tenant;
 };
 
 export interface MultiFactorAuthToken {
@@ -68,6 +74,7 @@ type TokenClaims = {
   admin?: boolean;
   mfa?: boolean;
   provider?: number;
+  tenant?: Tenant;
 };
 
 type TokenState = {
@@ -116,6 +123,7 @@ function buildUser(state: TokenState): User | undefined {
       admin: claims.admin,
       mfa: claims.mfa,
       provider: claims.provider,
+      tenant: claims.tenant,
     };
   }
 }
@@ -215,6 +223,9 @@ export interface Client {
   login(
     emailOrUsername: string,
     password: string,
+    opts?: {
+      tenant?: string;
+    },
   ): Promise<MultiFactorAuthToken | undefined>;
   loginSecond(opts: {
     mfaToken: MultiFactorAuthToken;
@@ -373,6 +384,9 @@ class ClientImpl implements Client {
   public async login(
     emailOrUsername: string,
     password: string,
+    opts?: {
+      tenant?: string;
+    },
   ): Promise<MultiFactorAuthToken | undefined> {
     try {
       const response = await this.fetch(`${authApiBasePath}/login`, {
@@ -380,6 +394,7 @@ class ClientImpl implements Client {
         body: JSON.stringify({
           email_or_username: emailOrUsername,
           password,
+          tenant: opts?.tenant,
         } as LoginRequest),
       });
 
