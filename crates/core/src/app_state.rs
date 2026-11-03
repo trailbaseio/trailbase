@@ -194,7 +194,7 @@ impl AppState {
       for tenant in tenants {
         if templates.iter().all(|t| *t != tenant.template) {
           return Err(InitError::CustomInit(format!(
-            "template {} not found",
+            "tenant template '{}' not found",
             tenant.template
           )));
         }

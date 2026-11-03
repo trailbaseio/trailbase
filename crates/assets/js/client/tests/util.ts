@@ -33,9 +33,9 @@ export function envVarSet(name: string): boolean {
   }
 }
 
-export async function connect(): Promise<Client> {
+export async function connect(opts?: { tenant?: string }): Promise<Client> {
   const client = initClient(new URL(`http://${serverAddress()}`));
-  await client.login("admin@localhost", "secret");
+  await client.login("admin@localhost", "secret", { tenant: opts?.tenant });
   return client;
 }
 

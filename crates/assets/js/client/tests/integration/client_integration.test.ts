@@ -77,6 +77,15 @@ describe("auth", () => {
     expect(headers1["Authorization"]).toBeUndefined();
   });
 
+  test("login w/ tenant", async () => {
+    const client = await connect({
+      tenant: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    });
+    expect(client.user()?.email).toBe("admin@localhost");
+    expect(client.user()?.username).toBe("admin");
+    expect(client.user()?.tenant?.template).toBe("test_template");
+  });
+
   test("register user", async () => {
     const client = initClient(new URL(`http://${serverAddress()}`));
 
