@@ -511,7 +511,8 @@ async fn test_auth_password_login_flow_with_pkce() {
     State(state.clone()),
     Query(LogoutParams::default()),
     Extension(HasRoot(false)),
-    Some(user.clone()),
+    None,
+    user.clone(),
     Cookies::default(),
   )
   .await
@@ -627,7 +628,8 @@ async fn test_auth_password_login_flow_without_pkce() {
     State(state.clone()),
     Query(LogoutParams::default()),
     Extension(HasRoot(false)),
-    Some(user.clone()),
+    None,
+    user.clone(),
     Cookies::default(),
   )
   .await
@@ -851,7 +853,8 @@ async fn test_auth_reset_password_flow() {
     State(state.clone()),
     Query(LogoutParams::default()),
     Extension(HasRoot(false)),
-    Some(user.clone()),
+    None,
+    user.clone(),
     Cookies::default(),
   )
   .await
@@ -1186,7 +1189,8 @@ async fn test_auth_change_username_and_unset_email_flow() {
     State(state.clone()),
     Query(LogoutParams::default()),
     Extension(HasRoot(false)),
-    Some(user.clone()),
+    None,
+    user.clone(),
     Cookies::default(),
   )
   .await

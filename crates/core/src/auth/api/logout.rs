@@ -1,6 +1,7 @@
 use axum::extract::{Extension, Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
+use axum_extra::TypedHeader;
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use ts_rs::TS;
@@ -28,31 +29,38 @@ pub struct LogoutParams {
   tag = "auth",
   params(LogoutParams),
   responses(
-    (status = 200, description = "Auth & refresh tokens.")
+    (status = 200, description = "Sessions deleted. JWT auth token remains valid until expiry but refresh is no longer possible."),
+    (status = 303, description = "Sessions deleted. JWT auth token remains valid until expiry but refresh is no longer possible. (?redirect_to= provided or non-json Content-Type with root path installed)"),
+    (status = 401, description = "Failed to delete sessions (missing or invalid JWT)."),
   )
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
   Query(query): Query<LogoutParams>,
   Extension(HasRoot(has_root)): Extension<HasRoot>,
-  user: Option<User>,
+  content_type: Option<TypedHeader<headers::ContentType>>,
+  user: User,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
   let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
 
+  delete_all_sessions_for_user(state.session_conn(), user.id).await?;
+
   remove_all_cookies(&cookies);
 
-  if let Some(user) = user {
-    delete_all_sessions_for_user(state.session_conn(), user.id).await?;
+  if let Some(redirect) = redirect_uri {
+    return Ok(Redirect::to(&redirect).into_response());
   }
 
-  return if let Some(redirect) = redirect_uri {
-    Ok(Redirect::to(&redirect).into_response())
-  } else if has_root {
-    Ok(Redirect::to("/").into_response())
-  } else {
-    Ok((StatusCode::OK, "logged out").into_response())
-  };
+  if has_root {
+    let is_json =
+      content_type.is_some_and(|TypedHeader(c)| mime::Mime::from(c) == mime::APPLICATION_JSON);
+    if !is_json {
+      return Ok(Redirect::to("/").into_response());
+    }
+  }
+
+  return Ok((StatusCode::OK, "logged out").into_response());
 }
 
 #[derive(Clone, Debug, Deserialize, ToSchema, TS)]

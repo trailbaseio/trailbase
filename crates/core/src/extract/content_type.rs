@@ -1,8 +1,8 @@
-use axum::extract::{FromRequest, Request};
+use axum::extract::FromRequestParts;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
+use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use thiserror::Error;
 
 /// Supported request content types.
 ///
@@ -15,7 +15,7 @@ pub enum RequestContentType {
   Form,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ContentTypeRejection {
   #[error("Unsupported Content-Type: {0}")]
   UnsupportedContentType(String),
@@ -77,13 +77,13 @@ impl ResponseContentType {
   }
 }
 
-impl<S> FromRequest<S> for ResponseContentType
+impl<S> FromRequestParts<S> for ResponseContentType
 where
   S: Send + Sync,
 {
   type Rejection = ContentTypeRejection;
 
-  async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-    return Self::from_headers(req.headers());
+  async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    return Self::from_headers(&parts.headers);
   }
 }
