@@ -329,6 +329,23 @@ pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
   };
 }
 
+pub async fn get_tenant_id_by_name(
+  user_conn: &trailbase_sqlite::Connection,
+  tenant_name: impl std::string::ToString,
+) -> Result<uuid::Uuid, AuthError> {
+  let id = user_conn
+    .read_query_row_get::<[u8; 16]>(
+      "SELECT id FROM \"_tenant\" WHERE name = $1",
+      params!(tenant_name.to_string()),
+      0,
+    )
+    .await
+    .map_err(|err| AuthError::Internal(format!("failed to query tenant: {err}").into()))?
+    .ok_or(AuthError::NotFound)?;
+
+  return Ok(uuid::Uuid::from_bytes(id));
+}
+
 pub(crate) async fn delete_all_sessions_for_user(
   session_conn: &trailbase_sqlite::Connection,
   user_id: uuid::Uuid,
