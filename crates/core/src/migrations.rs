@@ -30,10 +30,7 @@ pub fn new_unique_migration_filename(suffix: &str) -> String {
 }
 
 pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refinery::Runner {
-  let mut runner = trailbase_refinery::Runner::new(migrations)
-    .set_abort_divergent(true)
-    // run all migrations in a single transaction:
-    .set_grouped(false);
+  let mut runner = trailbase_refinery::Runner::new(migrations).set_abort_divergent(true);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
   return runner;
 }

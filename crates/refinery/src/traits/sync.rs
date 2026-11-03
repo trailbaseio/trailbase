@@ -25,7 +25,6 @@ pub fn migrate<T: Transaction>(
   dry_run: bool,
   target: Target,
   migration_table_name: &str,
-  grouped: bool,
 ) -> Result<Report, Error> {
   let mut migration_batch: Vec<(String, String)> = vec![];
   let mut applied_migrations = Vec::new();
@@ -51,44 +50,26 @@ pub fn migrate<T: Transaction>(
     migration_batch.push((migration.name().to_string(), insert_migration));
   }
 
-  match (target, grouped) {
-    (Target::Fake | Target::FakeVersion(_), _) => {
+  match target {
+    Target::Fake | Target::FakeVersion(_) => {
       log::info!("not going to apply any migration as fake flag is enabled");
     }
-    (Target::Latest | Target::Version(_), true) => {
+    Target::Latest | Target::Version(_) => {
       log::info!(
         "going to apply batch migrations in single transaction: {:#?}",
         applied_migrations.iter().map(ToString::to_string)
       );
     }
-    (Target::Latest | Target::Version(_), false) => {
-      log::info!(
-        "preparing to apply {} migrations: {:#?}",
-        applied_migrations.len(),
-        applied_migrations.iter().map(ToString::to_string)
-      );
-    }
   };
 
-  if grouped {
-    transaction
-      .execute(
-        migration_batch.iter().map(|(_name, sql)| sql.as_str()),
-        dry_run,
-      )
-      .migration_err("error applying migrations", None)?;
-  } else {
-    for (i, (_name, update)) in migration_batch.into_iter().enumerate() {
-      transaction
-        .execute([update.as_str()].into_iter(), dry_run)
-        .migration_err(
-          &format!("error applying update {_name}: {}", update),
-          Some(&applied_migrations[0..i / 2]),
-        )?;
-    }
-  }
+  transaction
+    .execute(
+      migration_batch.iter().map(|(_name, sql)| sql.as_str()),
+      dry_run,
+    )
+    .migration_err("error applying migrations", None)?;
 
-  Ok(Report::new(applied_migrations))
+  return Ok(Report::new(applied_migrations));
 }
 
 pub trait Migrate: Query<Vec<Migration>>
@@ -171,7 +152,6 @@ where
     abort_divergent: bool,
     abort_missing: bool,
     dry_run: bool,
-    grouped: bool,
     target: Target,
     migration_table_name: &str,
   ) -> Result<Report, Error> {
@@ -182,13 +162,6 @@ where
       migration_table_name,
     )?;
 
-    return migrate(
-      self,
-      migrations,
-      dry_run,
-      target,
-      migration_table_name,
-      grouped || matches!(target, Target::Fake | Target::FakeVersion(_)),
-    );
+    return migrate(self, migrations, dry_run, target, migration_table_name);
   }
 }

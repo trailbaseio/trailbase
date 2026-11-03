@@ -124,7 +124,6 @@ mod tests {
 
       Runner::new(&migrations)
         .set_abort_divergent(false)
-        .set_grouped(false)
         .set_dry_run(true)
         .run(&mut conn)
         .unwrap();
@@ -138,7 +137,6 @@ mod tests {
 
       Runner::new(&migrations)
         .set_abort_divergent(false)
-        .set_grouped(false)
         .run(&mut conn)
         .unwrap();
 
@@ -158,7 +156,6 @@ mod tests {
 
       Runner::new(&migrations)
         .set_abort_divergent(false)
-        .set_grouped(false)
         .run(&mut conn)
         .unwrap();
 

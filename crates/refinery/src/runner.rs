@@ -221,7 +221,6 @@ impl Report {
 ///
 /// [`embed_migrations!`]: macro.embed_migrations.html
 pub struct Runner {
-  grouped: bool,
   abort_divergent: bool,
   abort_missing: bool,
   dry_run: bool,
@@ -234,7 +233,6 @@ impl Runner {
   /// instantiate a new Runner
   pub fn new(migrations: &[Migration]) -> Runner {
     Runner {
-      grouped: false,
       target: Target::Latest,
       abort_divergent: true,
       abort_missing: true,
@@ -255,19 +253,6 @@ impl Runner {
   /// creates and updates refinery's schema migration table by default this is set to Latest
   pub fn set_target(self, target: Target) -> Runner {
     Runner { target, ..self }
-  }
-
-  /// Set true if all migrations should be grouped and run in a single transaction.
-  /// by default this is set to false, each migration runs on their own transaction
-  ///
-  /// # Note
-  ///
-  /// set_grouped won't probably work on MySQL Databases as MySQL lacks support for transactions
-  /// around schema alteration operations, meaning that if a migration fails to apply you will
-  /// have to manually unpick the changes in order to try again (it’s impossible to roll back to an
-  /// earlier point).
-  pub fn set_grouped(self, grouped: bool) -> Runner {
-    Runner { grouped, ..self }
   }
 
   /// Set true if migration process should abort if divergent migrations are found
@@ -375,7 +360,6 @@ impl Runner {
       self.abort_divergent,
       self.abort_missing,
       self.dry_run,
-      self.grouped,
       self.target,
       &self.migration_table_name,
     )
@@ -392,7 +376,6 @@ impl Runner {
       self.abort_divergent,
       self.abort_missing,
       self.dry_run,
-      self.grouped,
       self.target,
       &self.migration_table_name,
     )
@@ -449,7 +432,6 @@ where
           self.dry_run,
           self.target,
           &self.migration_table_name,
-          false,
         )
         .map(|r| r.applied_migrations.first().cloned())
         .map_err(|e| {
