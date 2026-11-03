@@ -1,3 +1,9 @@
+## v0.35.9
+
+- Return 401 from `/api/auth/v1/logout` if not logged in, don't redirect JSON requests and improve OpenAPI docs.
+- Refinery fork: add dry-run and remove un-grouped mode.
+- Update dependencies. Addresses security advisories.
+
 ## v0.35.8
 
 - This release mostly addresses Wasmtime security advisories.
