@@ -35,7 +35,7 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   return runner;
 }
 
-fn get_base_and_custom_migrations(
+pub(crate) fn get_base_and_custom_migrations(
   custom_migrations_path: Option<&Path>,
 ) -> Result<Vec<Migration>, RefineryError> {
   // e.g. file deletions table.
