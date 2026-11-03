@@ -50,17 +50,23 @@ impl LoginInputParams {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum TenantIdentifier {
+  Id(uuid::Uuid),
+  Name(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum LoginParams {
   /// Access token flow.
   Password {
     redirect_uri: Option<String>,
-    tenant: Option<uuid::Uuid>,
+    tenant: Option<TenantIdentifier>,
   },
   /// Authorization code flow.
   AuthorizationCodeFlowWithPkce {
     redirect_uri: String,
     pkce_code_challenge: String,
-    tenant: Option<uuid::Uuid>,
+    tenant: Option<TenantIdentifier>,
   },
 }
 
@@ -73,23 +79,36 @@ pub(crate) fn build_and_validate_input_params(
 
   let tenant = params
     .tenant
-    .as_deref()
-    .map(|t| -> Result<_, AuthError> {
+    .map(|t| -> Result<TenantIdentifier, AuthError> {
       let uuid = match t.trim().len() {
-        36 => uuid::Uuid::from_str(t).map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
-        _ => uuid::Uuid::from_slice(
-          &BASE64_URL_SAFE
-            .decode(t)
-            .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
-        )
-        .map_err(|_err| AuthError::BadRequest("invalid 'tenant'"))?,
+        0..3 => {
+          return Err(AuthError::BadRequest("tenant id too short"));
+        }
+        36 => {
+          let Ok(uuid) = uuid::Uuid::from_str(&t) else {
+            return Ok(TenantIdentifier::Name(t));
+          };
+          uuid
+        }
+        24 => {
+          let Ok(bytes) = BASE64_URL_SAFE
+            .decode(&t)
+            .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))
+          else {
+            return Ok(TenantIdentifier::Name(t));
+          };
+
+          uuid::Uuid::from_slice(&bytes)
+            .map_err(|_err| AuthError::BadRequest("invalid 'tenant'"))?
+        }
+        _ => return Ok(TenantIdentifier::Name(t)),
       };
 
       if uuid.get_version_num() != 4 {
         return Err(AuthError::BadRequest("invalid 'tenant'"));
       }
 
-      return Ok(uuid);
+      return Ok(TenantIdentifier::Id(uuid));
     })
     .transpose()?;
 
@@ -162,7 +181,7 @@ mod tests {
     assert_eq!(
       LoginParams::Password {
         redirect_uri: Some("/redirect".to_string()),
-        tenant: Some(tenant.clone())
+        tenant: Some(TenantIdentifier::Id(tenant.clone()))
       },
       build_and_validate_input_params(
         &state,

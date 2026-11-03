@@ -78,12 +78,23 @@ describe("auth", () => {
   });
 
   test("login w/ tenant", async () => {
-    const client = await connect({
+    // Make sure we can log in with tenant id.
+    const client0 = await connect({
       tenant: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     });
-    expect(client.user()?.email).toBe("admin@localhost");
-    expect(client.user()?.username).toBe("admin");
-    expect(client.user()?.tenant?.template).toBe("test_template");
+    expect(client0.user()?.email).toBe("admin@localhost");
+    expect(client0.user()?.username).toBe("admin");
+    expect(client0.user()?.tenant?.template).toBe("test_template");
+    expect(client0.user()?.tenant?.id).not.toBeUndefined();
+
+    // Or with tenant name.
+    const client1 = await connect({
+      tenant: "test_tenant",
+    });
+    expect(client1.user()?.email).toBe("admin@localhost");
+    expect(client1.user()?.username).toBe("admin");
+    expect(client1.user()?.tenant?.template).toBe("test_template");
+    expect(client1.user()?.tenant?.id).toBe(client0.user()?.tenant?.id);
   });
 
   test("register user", async () => {
