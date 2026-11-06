@@ -94,6 +94,7 @@ import type {
   ColumnOption,
   ListRowsResponse,
   ListSchemasResponse,
+  Schema,
   SqlValue,
   Table,
   TableIndex,
@@ -263,14 +264,14 @@ function TableHeaderRightHandButtons(props: {
 }
 
 function TablePaneHeader(props: {
-  table: [Table, string] | [View, string];
-  allTables: [Table, string][];
+  table: Schema<Table> | Schema<View>;
+  allTables: Schema<Table>[];
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
   postgres: boolean;
 }) {
-  const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
-  const selectedSchema = () => props.table[0];
+  const allTables = createMemo(() => props.allTables.map((t) => t.schema));
+  const selectedSchema = () => props.table.schema;
   const type = () => tableType(selectedSchema());
 
   return (
@@ -571,7 +572,7 @@ function IndexTable(props: {
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
 
   const indexes = createMemo(() => {
-    return props.schemas.indexes.filter(([index, _]) =>
+    return props.schemas.indexes.filter(({ schema: index }) =>
       equalQualifiedNames(props.table.name, {
         name: index.table_name,
         database_schema: index.name.database_schema,
@@ -580,7 +581,7 @@ function IndexTable(props: {
   });
 
   const columns = createMemo(buildIndexColumns);
-  const data = createMemo(() => indexes().map(([index, _]) => index));
+  const data = createMemo(() => indexes().map(({ schema: index }) => index));
   const indexesTable = buildTable({
     columns,
     data,
@@ -719,7 +720,7 @@ function IndexTable(props: {
 
 function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   const triggers = createMemo(() => {
-    return props.schemas.triggers.filter(([trig, _]) =>
+    return props.schemas.triggers.filter(({ schema: trig }) =>
       equalQualifiedNames(props.table.name, {
         name: trig.table_name,
         database_schema: trig.name.database_schema,
@@ -729,7 +730,7 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
 
   const columns = createMemo(buildTriggerColumns);
   const data = createMemo(() =>
-    triggers().map(([trig, sql]) => ({ ...trig, sql })),
+    triggers().map(({ schema: trig, sql }) => ({ ...trig, sql })),
   );
   const triggersTable = buildTable({
     columns,
@@ -783,12 +784,12 @@ type SearchParams = {
 };
 
 export function TablePane(props: {
-  selectedTable: [Table, string] | [View, string];
+  selectedTable: Schema<Table> | Schema<View>;
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
   postgres: boolean;
 }) {
-  const selectedSchema = () => props.selectedTable[0];
+  const selectedSchema = () => props.selectedTable.schema;
   const type = () => tableType(selectedSchema());
 
   // IMPORTANT: We need to memo the downstream search params use to treat absence and defaults
@@ -955,7 +956,7 @@ export function TablePane(props: {
             <Match when={type() === "table"}>
               <TableSchema
                 table={selectedSchema() as Table}
-                createTable={props.selectedTable[1]}
+                createTable={props.selectedTable.sql}
                 schemas={props.schemas}
                 schemaRefetch={props.schemaRefetch}
               />
@@ -964,7 +965,7 @@ export function TablePane(props: {
             <Match when={type() === "view"}>
               <ViewSchema
                 view={selectedSchema() as View}
-                createView={props.selectedTable[1]}
+                createView={props.selectedTable.sql}
               />
             </Match>
           </Switch>

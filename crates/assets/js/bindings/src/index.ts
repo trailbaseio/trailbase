@@ -80,6 +80,7 @@ export * from './ResponseType';
 export * from './RestoreBackupRequest';
 export * from './RunJobRequest';
 export * from './RunJobResponse';
+export * from './Schema';
 export * from './serde_json/JsonValue';
 export * from './SqlValue';
 export * from './StatsResponse';
