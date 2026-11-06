@@ -92,6 +92,7 @@ impl InsertParams {
         json.as_ref(),
         *is_geometry,
         value,
+        /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
@@ -214,6 +215,7 @@ impl UpdateParams {
         json.as_ref(),
         *is_geometry,
         value,
+        /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
@@ -297,6 +299,7 @@ impl UpdateParams {
                   json.as_ref(),
                   *is_geometry,
                   serde_json::from_str(&text)?,
+                  /* allow_file_metadata= */ true,
                 )?;
                 if let Some(json_files) = json_files {
                   // Note: files provided as a multipart form upload are handled below. They need
@@ -440,6 +443,7 @@ fn extract_params_and_files_from_json(
   json_metadata: Option<&JsonColumnMetadata>,
   #[allow(unused)] is_geometry: bool,
   value: serde_json::Value,
+  allow_file_metadata: bool,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json_metadata else {
@@ -474,7 +478,8 @@ fn extract_params_and_files_from_json(
   // Handle file columns specially, i.e. convert the JSON.
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-      let (metadata, contents) = extract_param_and_file_from_json_value(value)?;
+      let (metadata, contents) =
+        extract_param_and_file_from_json_value(value, allow_file_metadata)?;
       let param = Value::Text(serde_json::to_string(&metadata)?);
       return Ok((param, Some(vec![(metadata, contents)])));
     }
@@ -486,7 +491,8 @@ fn extract_params_and_files_from_json(
       let uploads: FileMetadataContents = array
         .into_iter()
         .map(|value| {
-          let (metadata, contents) = extract_param_and_file_from_json_value(value)?;
+          let (metadata, contents) =
+            extract_param_and_file_from_json_value(value, allow_file_metadata)?;
           return Ok((metadata, contents));
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
@@ -527,26 +533,33 @@ fn extract_params_and_files_from_json(
 
 fn extract_param_and_file_from_json_value(
   value: serde_json::Value,
+  allow_file_metadata: bool,
 ) -> Result<(FileUpload, Option<Vec<u8>>), ParamsError> {
-  // We allow inputs to either be "fresh" inputs containing actual data bytes or metadata
-  // round-tripped from prior reads (where the data is already stored). The latter is useful for
-  // updates and partial deletions.
-  //
-  // IMPORTANT: order matters. Input needs to be first to make Metadata the fallback.
-  #[derive(Debug, Deserialize)]
-  #[serde(untagged)]
-  enum InputOrMetadata {
-    Input(FileUploadInput),
-    Metadata(FileUpload),
-  }
-
-  return match serde_json::from_value::<InputOrMetadata>(value)? {
-    InputOrMetadata::Input(file_upload_input) => {
-      let (_col_name, metadata, content) = file_upload_input.consume()?;
-      Ok((metadata, Some(content.0)))
+  if allow_file_metadata {
+    // We (used to) allow inputs to either be "fresh" inputs containing actual data bytes or metadata
+    // round-tripped from prior reads (where the data is already stored). The latter is useful for
+    // updates and partial deletions. We currently only allow it for admin APIs.
+    //
+    // IMPORTANT: order matters. Input needs to be first to make Metadata the fallback.
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum InputOrMetadata {
+      Input(FileUploadInput),
+      Metadata(FileUpload),
     }
-    InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
-  };
+
+    return match serde_json::from_value::<InputOrMetadata>(value)? {
+      InputOrMetadata::Input(file_upload_input) => {
+        let (_col_name, metadata, content) = file_upload_input.consume()?;
+        Ok((metadata, Some(content.0)))
+      }
+      InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
+    };
+  } else {
+    let file_upload_input = serde_json::from_value::<FileUploadInput>(value)?;
+    let (_col_name, metadata, content) = file_upload_input.consume()?;
+    Ok((metadata, Some(content.0)))
+  }
 }
 
 pub trait ColumnAccessor {
@@ -574,6 +587,7 @@ mod tests {
   use base64::prelude::*;
   use schemars::{JsonSchema, schema_for};
   use serde_json::json;
+  use std::assert_matches;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::Table;
 
@@ -916,30 +930,40 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let registry =
-      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let registry = Arc::new(
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
+    );
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let id: i64 = 5;
 
     {
-      let value = json!({
-        "name": "Alice",
-        "avatar": {
-          "filename": "avatar_abc123.jpg",
-          "original_filename": "avatar.jpg",
-          "content_type": "image/jpeg",
-          "mime_type": "image/jpeg"
-        }
+      let avatar = json!({
+        "filename": "avatar.jpg",
+        "original_filename": "avatar.jpg",
+        "content_type": "image/jpeg",
+        "mime_type": "image/jpeg"
       });
 
-      let (params, files) = UpdateParams::new(
+      let value = json!({
+        "name": "Alice",
+        "avatar": avatar,
+      });
+
+      let obj = indexmap::IndexMap::<String, SqlValue>::from([
+        ("name".to_string(), SqlValue::Text("Alice".to_string())),
+        (
+          "avatar".to_string(),
+          SqlValue::Text(serde_json::to_string(&avatar).unwrap()),
+        ),
+      ]);
+
+      let (params, files) = UpdateParams::for_admin_update(
         &metadata,
-        &registry,
-        json_row_from_value(value).unwrap(),
-        None,
+        registry.clone(),
+        obj,
         "id".to_string(),
-        Value::Integer(id),
+        SqlValue::Integer(id),
       )
       .unwrap();
 
@@ -947,7 +971,7 @@ mod tests {
 
       // Avatar file-column should not be skipped but the file data is absent.
       assert_eq!(
-        vec![":avatar", ":name"],
+        vec![":name", ":avatar"],
         params
           .iter()
           .map(|p| p.placeholder.as_str())
@@ -955,6 +979,20 @@ mod tests {
       );
       assert_eq!(1, files.len());
       assert!(files[0].1.is_none());
+
+      // Now make sure that the non-admin version rejects metadata inputs.
+      assert_matches!(
+        UpdateParams::new(
+          &metadata,
+          &registry,
+          json_row_from_value(value).unwrap(),
+          None,
+          "id".to_string(),
+          Value::Integer(id),
+        )
+        .err(),
+        Some(ParamsError::JsonSerialization(_))
+      );
     }
 
     // Test: FileUploadInput with 'data' field should NOT be skipped.

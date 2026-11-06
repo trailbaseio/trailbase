@@ -469,6 +469,7 @@ mod tests {
   #![allow(irrefutable_let_patterns)]
 
   use serde::Deserialize;
+  use std::assert_matches;
   use trailbase_schema::db::metadata::ColumnMetadata;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::{Column, QualifiedName};
@@ -1206,6 +1207,74 @@ mod tests {
       .records;
       assert_eq!(arr1.len(), 1);
     }
+  }
+
+  #[tokio::test]
+  async fn test_filter_rejects_json_columns() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    conn
+      .execute_batch(format!(
+        r#"
+          CREATE TABLE "table" (
+            id         INTEGER PRIMARY KEY,
+            data       TEXT NOT NULL DEFAULT '',
+            file       {json} CHECK(jsonschema('std.FileUpload', file))
+          ) {strict};
+
+          INSERT INTO "table" (id, data) VALUES (1, 'a'), (2, 'aa'), (3, 'b');
+        "#,
+        strict = strict(conn),
+        json = json_column(&conn),
+      ))
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      proto::RecordApiConfig {
+        name: Some("api".to_string()),
+        table_name: Some("table".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    // Make sure setup works in principle.
+    let ListOrGeoJSONResponse::List(response) = list_records_handler(
+      State(state.clone()),
+      Path("api".to_string()),
+      Query(ListRecordsQuery::default()),
+      RawQuery(Some("filter[data][$like]=a%".to_string())),
+      None,
+    )
+    .await
+    .unwrap()
+    .0
+    else {
+      panic!("not a list");
+    };
+
+    assert_eq!(2, response.records.len());
+
+    // Then make sure file filter fails
+    assert_matches!(
+      list_records_handler(
+        State(state.clone()),
+        Path("api".to_string()),
+        Query(ListRecordsQuery::default()),
+        RawQuery(Some("filter[file][$like]=a%".to_string())),
+        None,
+      )
+      .await
+      .err(),
+      Some(RecordError::BadRequest("Invalid filter params"))
+    );
   }
 
   async fn list_records(

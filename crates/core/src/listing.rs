@@ -58,6 +58,14 @@ pub(crate) fn build_filter_where_clause(
       )));
     };
 
+    if meta.json.is_some() {
+      // We disallow filtering on JSON columns, e.g. to LIKE match FileUploads.
+      return Err(WhereClauseError::UnrecognizedParam(format!(
+        "Filter on unknown column: {}",
+        column_op_value.column
+      )));
+    }
+
     return crate::records::filter::qs_value_to_sql_with_constraints(
       &meta.column,
       column_op_value.value,
