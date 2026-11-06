@@ -24,6 +24,7 @@ pub struct TableTrigger {
 pub struct Schema<T: TS> {
   schema: T,
   sql: String,
+  tenant_template: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
@@ -88,16 +89,19 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
   return Ok(Json(ListSchemasResponse {
     tables: tables
       .into_values()
-      .map(|t| {
-        return Schema {
-          schema: t.schema,
-          sql: "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
-        };
+      .map(|t| Schema {
+        schema: t.schema,
+        sql: "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
+        tenant_template: None,
       })
       .collect(),
     indexes: indexes
       .into_iter()
-      .map(|(schema, sql)| Schema { schema, sql })
+      .map(|(schema, sql)| Schema {
+        schema,
+        sql,
+        tenant_template: None,
+      })
       .collect(),
     triggers: triggers
       .into_iter()
@@ -113,6 +117,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
           // NOTE: The action statement is not the full `CREATE TRIGGER`
           // statement like in SQLite.
           sql: t.action_statement,
+          tenant_template: None,
         };
       })
       .collect(),
@@ -121,6 +126,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
       .map(|v| Schema {
         schema: v.schema,
         sql: "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
+        tenant_template: None,
       })
       .collect(),
   }));
@@ -154,7 +160,7 @@ async fn list_tables_handler_sqlite_impl(
 
     let databases = conn.list_databases().await?;
     for schema in fetch_schemas(&conn, &databases, /* skip_main= */ !has_main).await? {
-      add_schema_to_response(schema, &mut response)?;
+      add_schema_to_response(schema, &mut response, None)?;
     }
   }
 
@@ -175,7 +181,7 @@ async fn list_tables_handler_sqlite_impl(
     for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
       log::debug!("scanning {tenant_template}, {schema:?}");
 
-      add_schema_to_response(schema, &mut response)?;
+      add_schema_to_response(schema, &mut response, Some(tenant_template.clone()))?;
     }
   }
 
@@ -241,76 +247,82 @@ async fn fetch_schemas(
 fn add_schema_to_response(
   schema: SqliteSchema,
   response: &mut ListSchemasResponse,
+  tenant_template: Option<String>,
 ) -> Result<(), Error> {
-  let db_schema: Option<String> = match schema.db_schema.as_str() {
+  let SqliteSchema {
+    r#type: type_name,
+    name,
+    tbl_name,
+    sql,
+    db_schema,
+  } = schema;
+
+  let build_db_schema = || match db_schema.as_str() {
     "" | "main" => None,
     db => Some(db.to_string()),
   };
 
-  match schema.r#type.as_str() {
+  match type_name.as_str() {
     "table" => {
-      let table_name = &schema.name;
-      // if table
-
-      let Some(sql) = schema.sql else {
-        warn!("Skipping missing sql for table: {table_name}");
+      let Some(ref sql) = sql else {
+        warn!("Skipping missing sql for table: {name}");
         return Ok(());
       };
 
       let allocator = Bump::new();
       if let Some(create_table_statement) =
-        parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
+        parse_into_statement(&allocator, sql).map_err(|err| Error::Internal(err.into()))?
       {
         response.tables.push(Schema {
           schema: {
             let mut table: Table = (&create_table_statement).try_into()?;
-            table.name.database_schema = db_schema;
+            table.name.database_schema = build_db_schema();
             table
           },
           sql: sql.clone(),
+          tenant_template,
         });
       }
     }
     "index" => {
-      let index_name = &schema.name;
-      let Some(sql) = schema.sql else {
+      let Some(ref sql) = sql else {
         // Auto-indexes are expected to not have `.sql`.
-        if !index_name.starts_with("sqlite_autoindex") {
-          warn!("Skip missing sql for index: {index_name}");
+        if !name.starts_with("sqlite_autoindex") {
+          warn!("Skip missing sql for index: {name}");
         }
         return Ok(());
       };
 
       let allocator = Bump::new();
       if let Some(create_index_statement) =
-        parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
+        parse_into_statement(&allocator, sql).map_err(|err| Error::Internal(err.into()))?
       {
         response.indexes.push(Schema {
           schema: {
             let mut index: TableIndex = (&create_index_statement).try_into()?;
-            index.name.database_schema = db_schema;
+            index.name.database_schema = build_db_schema();
             index
           },
           sql: sql.clone(),
+          tenant_template,
         });
       }
     }
     "view" => {
-      let view_name = &schema.name;
-      let Some(sql) = schema.sql else {
-        warn!("Skip missing sql for view: {view_name}");
+      let Some(ref sql) = sql else {
+        warn!("Skip missing sql for view: {name}");
         return Ok(());
       };
 
       let allocator = Bump::new();
       if let Some(create_view_statement) =
-        parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
+        parse_into_statement(&allocator, sql).map_err(|err| Error::Internal(err.into()))?
       {
         let tables: Vec<_> = response
           .tables
           .iter()
           .filter_map(|Schema { schema: table, .. }| {
-            if table.name.database_schema.as_deref().unwrap_or("main") == schema.db_schema {
+            if table.name.database_schema.as_deref().unwrap_or("main") == db_schema {
               return Some(table.clone());
             }
             return None;
@@ -320,16 +332,17 @@ fn add_schema_to_response(
         response.views.push(Schema {
           schema: {
             let mut view = View::from(create_view_statement, &tables)?;
-            view.name.database_schema = db_schema;
+            view.name.database_schema = build_db_schema();
             view
           },
           sql: sql.clone(),
+          tenant_template,
         });
       }
     }
     "trigger" => {
-      let Some(sql) = schema.sql else {
-        warn!("Skipping empty trigger for: {schema:?}");
+      let Some(sql) = sql else {
+        warn!("Skipping empty trigger for: {name}");
         return Ok(());
       };
 
@@ -337,15 +350,16 @@ fn add_schema_to_response(
       response.triggers.push(Schema {
         schema: TableTrigger {
           name: QualifiedName {
-            name: schema.name,
-            database_schema: db_schema,
+            name,
+            database_schema: build_db_schema(),
           },
-          table_name: schema.tbl_name,
+          table_name: tbl_name,
         },
-        sql: sql.clone(),
+        sql,
+        tenant_template,
       });
     }
-    ty => warn!("Unknown schema type for '{}': {ty}", schema.name),
+    ty => warn!("Unknown schema type for '{}': {ty}", name),
   }
 
   return Ok(());
