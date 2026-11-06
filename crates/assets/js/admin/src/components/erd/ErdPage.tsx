@@ -161,8 +161,8 @@ function buildErdModel(
   resolvedTheme: ResolvedTheme,
 ): ErdModel {
   const allTablesAndViews = [
-    ...schema.tables.map(([table]) => table),
-    ...schema.views.map(([view]) => view),
+    ...schema.tables.map(({ schema: table }) => table),
+    ...schema.views.map(({ schema: view }) => view),
   ];
   const visibleTablesAndViews = allTablesAndViews.filter((tableOrView) => {
     const type = tableType(tableOrView);
