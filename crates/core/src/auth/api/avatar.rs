@@ -27,7 +27,7 @@ pub async fn get_avatar_handler(
   State(state): State<AppState>,
   Path(b64_user_id): Path<String>,
 ) -> Result<Response, AuthError> {
-  let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
+  let Ok(user_id) = crate::util::parse_uuid(&b64_user_id) else {
     return Err(AuthError::BadRequest("Invalid user id"));
   };
 

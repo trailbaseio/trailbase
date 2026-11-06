@@ -81,21 +81,18 @@ pub fn parse_string_to_sqlite_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<SqliteValue, JsonError> {
-  return Ok(match data_type {
+  return match data_type {
     // Strict/storage types
-    ColumnDataType::Text | ColumnDataType::Any => SqliteValue::Text(value),
-    ColumnDataType::Blob => SqliteValue::Blob(match (value.len(), value) {
-      // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
-      // would be more explicit rely on CHECK(...) column options.
-      // NOTE: That UUIDs also parse as url-safe base64, that's why we treat it as a fall-first.
-      (36, v) => uuid::Uuid::parse_str(&v)
-        .map(|v| v.into())
-        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
-      (_, v) => BASE64_URL_SAFE.decode(&v)?,
-    }),
-    ColumnDataType::Integer => SqliteValue::Integer(value.parse::<i64>()?),
-    ColumnDataType::Real => SqliteValue::Real(value.parse::<f64>()?),
-  });
+    ColumnDataType::Text | ColumnDataType::Any => Ok(SqliteValue::Text(value)),
+    // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
+    // would be more explicit rely on CHECK(...) column options.
+    ColumnDataType::Blob => match crate::parse_uuid_vec(&value) {
+      Ok(uuid) => Ok(SqliteValue::Blob(uuid.into())),
+      Err(_) => Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&value)?)),
+    },
+    ColumnDataType::Integer => Ok(SqliteValue::Integer(value.parse::<i64>()?)),
+    ColumnDataType::Real => Ok(SqliteValue::Real(value.parse::<f64>()?)),
+  };
 }
 
 /// Strictly parse string to SqliteValue, i.e. w/o trying to parse e.g. strings into INT or REAL.
@@ -106,15 +103,12 @@ fn strict_parse_string_to_sqlite_value(
 ) -> Result<SqliteValue, JsonError> {
   return match data_type {
     ColumnDataType::Text | ColumnDataType::Any => Ok(SqliteValue::Text(value)),
-    ColumnDataType::Blob => Ok(SqliteValue::Blob(match (value.len(), value) {
-      // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
-      // would be more explicit rely on CHECK(...) column options.
-      // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
-      (36, v) => uuid::Uuid::parse_str(&v)
-        .map(|v| v.into())
-        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
-      (_, v) => BASE64_URL_SAFE.decode(&v)?,
-    })),
+    // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
+    // would be more explicit rely on CHECK(...) column options.
+    ColumnDataType::Blob => match crate::parse_uuid_vec(&value) {
+      Ok(uuid) => Ok(SqliteValue::Blob(uuid.into())),
+      Err(_) => Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&value)?)),
+    },
     _ => Err(JsonError::UnexpectedType("string", data_type)),
   };
 }
@@ -144,8 +138,7 @@ mod tests {
       .await
       .unwrap();
 
-    let id_string = "01950408-de17-7f13-8ef5-66d90b890bfd";
-    let id = uuid::Uuid::parse_str(id_string).unwrap();
+    let id = uuid::Uuid::new_v4();
 
     conn
       .execute(
@@ -155,8 +148,7 @@ mod tests {
       .await
       .unwrap();
 
-    let value =
-      strict_parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let value = strict_parse_string_to_sqlite_value(ColumnDataType::Blob, id.to_string()).unwrap();
     let blob = match value {
       trailbase_sqlite::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),

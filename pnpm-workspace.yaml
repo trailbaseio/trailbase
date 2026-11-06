@@ -31,5 +31,6 @@ minimumReleaseAgeExclude:
 overrides:
   form-data@>=4.0.0 <4.0.6: ^4.0.6
 auditConfig:
-  ignoreGhsas:
+  ignoreGhsas: [
     # - GHSA-ch52-4w7c-c8xp  # example
+  ]

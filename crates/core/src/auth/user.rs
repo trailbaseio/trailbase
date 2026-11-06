@@ -6,10 +6,10 @@ use compact_str::CompactString;
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
+use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
-use crate::{app_state::AppState, util::b64_to_uuid};
 
 #[derive(Debug, Default, Clone)]
 pub struct DbUser {
@@ -125,7 +125,8 @@ impl User {
   /// Construct new verified [User] from [AuthTokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
-    let id = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
+    let id = crate::util::b64_to_uuid(&claims.sub)
+      .map_err(|_err| AuthError::BadRequest("invalid user id"))?;
 
     return Ok(Self {
       id,

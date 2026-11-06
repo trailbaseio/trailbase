@@ -28,7 +28,7 @@ use crate::constants::{
 };
 use crate::extract::Either;
 use crate::rand::random_alphanumeric;
-use crate::util::{b64_to_uuid, urlencode};
+use crate::util::urlencode;
 
 #[derive(Debug, Deserialize, TS, ToSchema)]
 #[serde(untagged)]
@@ -488,7 +488,7 @@ pub(crate) async fn login_mfa_handler(
   // Check credentials.
   let db_user: DbUser = user_by_id(
     &state,
-    &b64_to_uuid(&sub).map_err(|_err| AuthError::Unauthorized)?,
+    &crate::util::b64_to_uuid(&sub).map_err(|_err| AuthError::Unauthorized)?,
   )
   .await
   .map_err(|_| {

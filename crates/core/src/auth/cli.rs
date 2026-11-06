@@ -1,4 +1,3 @@
-use base64::prelude::*;
 use chrono::Duration;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
@@ -26,22 +25,18 @@ pub enum UserReference {
 
 impl UserReference {
   pub fn parse(user: impl AsRef<str>) -> Result<Self, String> {
-    let user = user.as_ref().trim().to_string();
+    let user = user.as_ref().trim();
     if user.contains("@") {
       if !user.validate_email() {
         return Err(format!("invalid email address: {user}"));
       }
-      return Ok(Self::Email(user));
+      return Ok(Self::Email(user.to_string()));
     }
 
     // TODO: We could do more validation, e.g. username characters, UUID version, etc.
-    return match user.len() {
-      36 if let Ok(uuid) = Uuid::parse_str(&user) => Ok(Self::Id(uuid)),
-      24 if let Ok(base64) = BASE64_URL_SAFE.decode(&user) => Ok(Self::Id(
-        Uuid::from_slice(&base64).map_err(|err| err.to_string())?,
-      )),
-      _ => Ok(Self::Username(user)),
-    };
+    return Ok(
+      crate::util::parse_uuid(user).map_or_else(|_err| Self::Username(user.to_string()), Self::Id),
+    );
   }
 
   async fn lookup_user(&self, user_conn: &Connection) -> Result<DbUser, AuthError> {
@@ -311,6 +306,8 @@ pub async fn import_users(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  use base64::prelude::*;
 
   #[test]
   fn test_parse_user_reference() {

@@ -12,6 +12,8 @@ pub enum ParamsError {
   UnexpectedType(&'static str, String),
   #[error("Decoding: {0}")]
   Base64Decode(base64::DecodeError),
+  #[error("Id: {0}")]
+  Id(trailbase_schema::IdError),
   #[error("Nested object: {0}")]
   NestedObject(String),
   #[error("Nested array: {0}")]
@@ -43,6 +45,7 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
       trailbase_schema::json::JsonError::ColumnMismatch => Self::Column("mismatch"),
       trailbase_schema::json::JsonError::NotSupported => Self::UnexpectedType("?", "?".to_string()),
       trailbase_schema::json::JsonError::Decode(err) => Self::Base64Decode(err),
+      trailbase_schema::json::JsonError::Id(err) => Self::Id(err),
       trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
         Self::UnexpectedType(expected, format!("{got:?}"))
       }

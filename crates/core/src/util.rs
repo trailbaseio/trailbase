@@ -5,6 +5,8 @@ use std::borrow::Cow;
 use trailbase_sqlite::ConnectionType;
 use uuid::Uuid;
 
+pub use trailbase_schema::{IdError, parse_uuid};
+
 #[inline]
 pub fn row_id_column(connection_type: ConnectionType) -> &'static str {
   return match connection_type {
@@ -13,33 +15,26 @@ pub fn row_id_column(connection_type: ConnectionType) -> &'static str {
   };
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum IdError {
-  #[error("Id error: {0}")]
-  InvalidLength(usize),
-  #[error("Id error: {0}")]
-  Decode(#[from] base64::DecodeSliceError),
-}
-
-pub fn b64_to_id(b64_id: &str) -> Result<[u8; 16], IdError> {
-  let mut buffer: [u8; 16] = [0; 16];
-  let len = BASE64_URL_SAFE.decode_slice(b64_id, &mut buffer)?;
-  if len != 16 {
-    return Err(IdError::InvalidLength(len));
-  }
-  return Ok(buffer);
-}
-
 pub fn id_to_b64(id: &[u8; 16]) -> String {
   return BASE64_URL_SAFE.encode(id);
 }
 
 pub fn uuid_to_b64(uuid: &Uuid) -> String {
-  return BASE64_URL_SAFE.encode(uuid.into_bytes());
+  return BASE64_URL_SAFE.encode(uuid.as_bytes());
 }
 
+#[inline]
 pub fn b64_to_uuid(b64_id: &str) -> Result<Uuid, IdError> {
-  return Ok(Uuid::from_bytes(b64_to_id(b64_id)?));
+  let s = b64_id.trim();
+  return match s.len() {
+    24 => Ok(Uuid::from_slice(&BASE64_URL_SAFE.decode(&s)?)?),
+    len => Err(IdError::InvalidLength(len)),
+  };
+}
+
+#[cfg(test)]
+pub fn b64_to_id(b64_id: &str) -> Result<[u8; 16], IdError> {
+  return Ok(b64_to_uuid(b64_id)?.into_bytes());
 }
 
 pub fn urlencode(s: &str) -> String {
@@ -68,5 +63,20 @@ mod tests {
   #[test]
   fn test_urlencode() {
     assert_eq!(urlencode("+col0,-col1"), "%2Bcol0%2C-col1");
+  }
+
+  #[test]
+  fn test_parse_uuid() {
+    let uuid = Uuid::new_v4();
+
+    assert_eq!(uuid, parse_uuid(&uuid.to_string()).unwrap());
+    assert_eq!(
+      uuid,
+      parse_uuid(&BASE64_URL_SAFE.encode(uuid.as_bytes())).unwrap()
+    );
+    assert_eq!(
+      uuid,
+      parse_uuid(&BASE64_URL_SAFE_NO_PAD.encode(uuid.as_bytes())).unwrap()
+    );
   }
 }

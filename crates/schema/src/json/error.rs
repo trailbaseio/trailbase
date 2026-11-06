@@ -8,6 +8,8 @@ pub enum JsonError {
   NotSupported,
   #[error("ColumnMismatch")]
   ColumnMismatch,
+  #[error("Id")]
+  Id(#[from] crate::IdError),
   #[error("Decoding")]
   Decode(#[from] base64::DecodeError),
   #[error("UnexpectedT: {0}, expected {1:?}")]
