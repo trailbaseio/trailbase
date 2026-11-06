@@ -93,10 +93,6 @@ struct InternalState {
 
   #[cfg(test)]
   #[allow(unused)]
-  pg_uri: Option<String>,
-
-  #[cfg(test)]
-  #[allow(unused)]
   test_cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
 }
 
@@ -348,8 +344,6 @@ impl AppState {
             args.wasm_filesystem_root,
             args.dev,
           ),
-          #[cfg(test)]
-          pg_uri: None,
           #[cfg(test)]
           test_cleanup: vec![],
         }),
@@ -973,7 +967,6 @@ mod test_utils {
         object_store,
         #[cfg(feature = "wasm")]
         wasm: crate::wasm::WasmState::default(),
-        pg_uri,
         test_cleanup: vec![Box::new(pg_container), Box::new(temp_dir)],
       }),
     });
