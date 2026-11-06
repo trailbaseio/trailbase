@@ -48,15 +48,16 @@ import {
 
 import type {
   ListSchemasResponse,
+  QualifiedName,
+  Schema,
   Table,
   View,
-  QualifiedName,
 } from "trailbase-bindings";
 
 function pickInitiallySelectedTable(
-  tables: ([Table, string] | [View, string])[],
+  tables: (Schema<Table> | Schema<View>)[],
   qualifiedTableName: string | undefined,
-): [Table, string] | [View, string] | undefined {
+): Schema<Table> | Schema<View> | undefined {
   if (tables.length === 0) {
     return undefined;
   }
@@ -65,15 +66,15 @@ function pickInitiallySelectedTable(
 
   if (candidate) {
     for (const table of tables) {
-      if (candidate === prettyFormatQualifiedName(table[0].name)) {
+      if (candidate === prettyFormatQualifiedName(table.schema.name)) {
         return table;
       }
     }
   }
 
-  const first = tables.find(([t, _]) => !hiddenTable(t)) ?? tables[0];
+  const first = tables.find((t) => !hiddenTable(t.schema)) ?? tables[0];
   console.debug(
-    `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first[0].name)}`,
+    `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first.schema.name)}`,
   );
   return first;
 }
@@ -309,10 +310,10 @@ function TableSplitView(props: {
   const navigate = useNavigate();
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
 
-  const allTables = createMemo(() => props.schemas.tables.map(([t, _]) => t));
+  const allTables = createMemo(() => props.schemas.tables.map((t) => t.schema));
   const allTablesAndView = createMemo(() => [
-    ...props.schemas.tables.map(([t, _]) => t),
-    ...props.schemas.views.map(([v, _]) => v),
+    ...props.schemas.tables.map((t) => t.schema),
+    ...props.schemas.views.map((v) => v.schema),
   ]);
 
   const params = useParams<{ table: string | undefined }>();
@@ -366,7 +367,7 @@ function TableSplitView(props: {
                 <TablePickerSidebar
                   tablesAndViews={allTablesAndView()}
                   allTables={allTables()}
-                  selectedTable={selectedTable()?.[0]}
+                  selectedTable={selectedTable()?.schema}
                   schemaRefetch={props.schemaRefetch}
                   openCreateTableDialog={() => setCreateTableDialog(true)}
                   postgres={isPostgres()}

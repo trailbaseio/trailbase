@@ -21,16 +21,22 @@ pub struct TableTrigger {
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
+pub struct Schema<T: TS> {
+  schema: T,
+  sql: String,
+}
+
+#[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListSchemasResponse {
   /// List of tuples of `Table` schema + `CREATE TABLE` query.
-  pub tables: Vec<(Table, String)>,
+  pub tables: Vec<Schema<Table>>,
   /// List of tuples of `TableIndex` schema + `CREATE INDEX` query.
-  pub indexes: Vec<(TableIndex, String)>,
+  pub indexes: Vec<Schema<TableIndex>>,
   /// List of tuples of `TableTrigger` schema + `CREATE Trigger` query.
-  pub triggers: Vec<(TableTrigger, String)>,
+  pub triggers: Vec<Schema<TableTrigger>>,
   /// List of tuples of `View` schema + `CREATE View` query.
-  pub views: Vec<(View, String)>,
+  pub views: Vec<Schema<View>>,
 }
 
 #[utoipa::path(
@@ -83,18 +89,21 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
     tables: tables
       .into_values()
       .map(|t| {
-        (
-          t.schema,
-          "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
-        )
+        return Schema {
+          schema: t.schema,
+          sql: "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
+        };
       })
       .collect(),
-    indexes,
+    indexes: indexes
+      .into_iter()
+      .map(|(schema, sql)| Schema { schema, sql })
+      .collect(),
     triggers: triggers
       .into_iter()
       .map(|t| {
-        return (
-          TableTrigger {
+        return Schema {
+          schema: TableTrigger {
             name: QualifiedName {
               name: t.trigger_name,
               database_schema: Some(t.trigger_schema),
@@ -103,17 +112,15 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
           },
           // NOTE: The action statement is not the full `CREATE TRIGGER`
           // statement like in SQLite.
-          t.action_statement,
-        );
+          sql: t.action_statement,
+        };
       })
       .collect(),
     views: views
       .into_values()
-      .map(|v| {
-        (
-          v.schema,
-          "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
-        )
+      .map(|v| Schema {
+        schema: v.schema,
+        sql: "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
       })
       .collect(),
   }));
@@ -254,14 +261,14 @@ fn add_schema_to_response(
       if let Some(create_table_statement) =
         parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
       {
-        response.tables.push((
-          {
+        response.tables.push(Schema {
+          schema: {
             let mut table: Table = (&create_table_statement).try_into()?;
             table.name.database_schema = db_schema;
             table
           },
-          sql.clone(),
-        ));
+          sql: sql.clone(),
+        });
       }
     }
     "index" => {
@@ -278,14 +285,14 @@ fn add_schema_to_response(
       if let Some(create_index_statement) =
         parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
       {
-        response.indexes.push((
-          {
+        response.indexes.push(Schema {
+          schema: {
             let mut index: TableIndex = (&create_index_statement).try_into()?;
             index.name.database_schema = db_schema;
             index
           },
-          sql.clone(),
-        ));
+          sql: sql.clone(),
+        });
       }
     }
     "view" => {
@@ -302,7 +309,7 @@ fn add_schema_to_response(
         let tables: Vec<_> = response
           .tables
           .iter()
-          .filter_map(|(table, _)| {
+          .filter_map(|Schema { schema: table, .. }| {
             if table.name.database_schema.as_deref().unwrap_or("main") == schema.db_schema {
               return Some(table.clone());
             }
@@ -310,14 +317,14 @@ fn add_schema_to_response(
           })
           .collect();
 
-        response.views.push((
-          {
+        response.views.push(Schema {
+          schema: {
             let mut view = View::from(create_view_statement, &tables)?;
             view.name.database_schema = db_schema;
             view
           },
-          sql.clone(),
-        ));
+          sql: sql.clone(),
+        });
       }
     }
     "trigger" => {
@@ -327,16 +334,16 @@ fn add_schema_to_response(
       };
 
       // TODO: Turn this into structured data now that we use sqlite3_parser.
-      response.triggers.push((
-        TableTrigger {
+      response.triggers.push(Schema {
+        schema: TableTrigger {
           name: QualifiedName {
             name: schema.name,
             database_schema: db_schema,
           },
           table_name: schema.tbl_name,
         },
-        sql.clone(),
-      ));
+        sql: sql.clone(),
+      });
     }
     ty => warn!("Unknown schema type for '{}': {ty}", schema.name),
   }
