@@ -1,3 +1,9 @@
+## v0.35.10
+
+- Address issue where internal ids of read-only files can be oracled using the list API and deleted. Reported by Sparks 🙏.
+- Minor: more consitent & robust UUID parsing ignoring whitespaces.
+- Update dependencies.
+
 ## v0.35.9
 
 - Return 401 from `/api/auth/v1/logout` if not logged in, don't redirect JSON requests and improve OpenAPI docs.
