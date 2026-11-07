@@ -3,6 +3,8 @@ package io.trailbase.client
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.descriptors.element
@@ -78,4 +80,20 @@ open class ExpandableSerializer<T>(
 
             Expandable.withData(RecordId.parse(id), data)
         }
+}
+
+/**
+ * Serializer for boolean types.
+ */
+class BooleanColumnSerializer: KSerializer<Boolean> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor(Boolean::class.simpleName!!, PrimitiveKind.INT)
+
+    override fun serialize(encoder: Encoder, value: Boolean) {
+        encoder.encodeInt(if (value) 1 else 0)
+    }
+
+    override fun deserialize(decoder: Decoder): Boolean {
+        return decoder.decodeInt() == 1
+    }
 }

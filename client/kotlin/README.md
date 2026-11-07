@@ -109,6 +109,20 @@ people.update(id, Person(age = Omittable.Present(null)))
 
 [^1]: This does not apply when working with `JsonObject`s directly.
 
+### Boolean columns
+SQLite doesn't have a `BOOLEAN` column type. Instead, you can store boolean values as integers with values 0 (`false`) and 1 (`true`) instead.
+You can ask the Kotlin client to automatically convert such columns to Kotlin's `Boolean` type by annotating the field with
+`@Serializable(with = BooleanColumnSerializer::class)`.
+
+```kotlin
+@Serializable
+data class Person(
+    val id: Int? = null,
+    @Serializable(with = BooleanColumnSerializer::class)
+    var isEmailVerified: Boolean = false,
+)
+```
+
 ## Foreign-keys and expanded relations
 
 If you use foreign-keys in your data model to reference other records, your API can be configured to optionally inline or expand the referenced data in read and list operations.[^2]
