@@ -87,7 +87,7 @@ pub fn parse_string_to_sqlite_value(
     // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
     // would be more explicit rely on CHECK(...) column options.
     ColumnDataType::Blob => match crate::parse_uuid_vec(&value) {
-      Ok(uuid) => Ok(SqliteValue::Blob(uuid.into())),
+      Ok(uuid) => Ok(SqliteValue::Blob(uuid)),
       Err(_) => Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&value)?)),
     },
     ColumnDataType::Integer => Ok(SqliteValue::Integer(value.parse::<i64>()?)),
@@ -106,7 +106,7 @@ fn strict_parse_string_to_sqlite_value(
     // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
     // would be more explicit rely on CHECK(...) column options.
     ColumnDataType::Blob => match crate::parse_uuid_vec(&value) {
-      Ok(uuid) => Ok(SqliteValue::Blob(uuid.into())),
+      Ok(uuid) => Ok(SqliteValue::Blob(uuid)),
       Err(_) => Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&value)?)),
     },
     _ => Err(JsonError::UnexpectedType("string", data_type)),

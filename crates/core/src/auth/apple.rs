@@ -204,7 +204,7 @@ where
 #[cfg(test)]
 pub mod test_support {
   use base64::prelude::*;
-  use rsa::RsaPrivateKey;
+  use rsa::PrivateKey;
   use rsa::pkcs8::EncodePrivateKey;
   use rsa::traits::PublicKeyParts;
   use std::sync::LazyLock;
@@ -221,10 +221,10 @@ pub mod test_support {
   });
 
   /// RSA private key standing in for Apple's signing key.
-  fn signing_key() -> &'static RsaPrivateKey {
-    static KEY: LazyLock<RsaPrivateKey> = LazyLock::new(|| {
+  fn signing_key() -> &'static PrivateKey {
+    static KEY: LazyLock<PrivateKey> = LazyLock::new(|| {
       let mut rng = rand::rng();
-      return RsaPrivateKey::new(&mut rng, 2048).unwrap();
+      return PrivateKey::new(&mut rng, 2048).unwrap();
     });
 
     return &KEY;

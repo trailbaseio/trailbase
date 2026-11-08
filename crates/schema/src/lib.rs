@@ -27,9 +27,9 @@ pub fn parse_uuid_vec(s: &str) -> Result<Vec<u8>, IdError> {
 
   let s = s.trim();
   return match s.len() {
-    36 => Ok(uuid::Uuid::parse_str(&s)?.into()),
-    22 => Ok(BASE64_URL_SAFE_NO_PAD.decode(&s)?),
-    24 => Ok(BASE64_URL_SAFE.decode(&s)?),
+    36 => Ok(uuid::Uuid::parse_str(s)?.into()),
+    22 => Ok(BASE64_URL_SAFE_NO_PAD.decode(s)?),
+    24 => Ok(BASE64_URL_SAFE.decode(s)?),
     len => Err(IdError::InvalidLength(len)),
   };
 }
@@ -40,9 +40,9 @@ pub fn parse_uuid(s: &str) -> Result<uuid::Uuid, IdError> {
 
   let s = s.trim();
   return match s.len() {
-    36 => Ok(uuid::Uuid::parse_str(&s)?),
-    22 => Ok(uuid::Uuid::from_slice(&BASE64_URL_SAFE_NO_PAD.decode(&s)?)?),
-    24 => Ok(uuid::Uuid::from_slice(&BASE64_URL_SAFE.decode(&s)?)?),
+    36 => Ok(uuid::Uuid::parse_str(s)?),
+    22 => Ok(uuid::Uuid::from_slice(&BASE64_URL_SAFE_NO_PAD.decode(s)?)?),
+    24 => Ok(uuid::Uuid::from_slice(&BASE64_URL_SAFE.decode(s)?)?),
     len => Err(IdError::InvalidLength(len)),
   };
 }

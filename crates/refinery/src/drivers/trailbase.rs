@@ -102,7 +102,7 @@ pub(super) fn query_applied_migrations<C: SyncConnection>(
   conn: &mut C,
   query: &str,
 ) -> Result<Vec<Migration>, Error> {
-  let rows = conn.query_rows(query.to_string(), ())?;
+  let rows = conn.query_rows(query, ())?;
 
   return rows
     .iter()

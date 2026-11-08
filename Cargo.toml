@@ -51,7 +51,7 @@ strip = "debuginfo" # ("symbols", "debuginfo", "none")
 opt-level = 1
 
 [workspace.dependencies]
-arc-swap = { version = "1.9.3", default-features = false }
+arc-swap = { version = "1.9.4", default-features = false }
 argon2 = { version = "^0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.9", default-features = false, features = ["multipart", "tokio", "http2"] }
@@ -76,7 +76,7 @@ jsonwebtoken = { version = "11.1.0", default-features = false, features = ["use_
 litegis = { version = "0.0.8", default-features = false }
 log = { version = "0.4.35", default-features = false }
 mimalloc = { version = "^0.1.52", default-features = false }
-minijinja = { version = "3.0.5", default-features = false }
+minijinja = { version = "3.1.0", default-features = false }
 parking_lot = { version = "0.13.0", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.3"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }

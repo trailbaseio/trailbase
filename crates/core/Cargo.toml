@@ -69,7 +69,7 @@ hyper-util = "0.1.21"
 indexmap = "2.14.2"
 init-tracing-opentelemetry = { version = "0.44.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.60.2", default-features = false }
+jsonschema = { version = "0.61.0", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.1"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
@@ -148,7 +148,7 @@ indoc = "2.0.8"
 mimalloc = { workspace = true }
 quoted_printable = "0.5.2"
 rcgen = "0.14.10"
-rsa = "0.10.0-rc.21"
+rsa = "0.10.0-rc.22"
 schemars = "1.2.3"
 temp-dir = "0.2.0"
 testcontainers-modules = { workspace = true }

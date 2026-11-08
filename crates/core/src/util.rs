@@ -27,7 +27,7 @@ pub fn uuid_to_b64(uuid: &Uuid) -> String {
 pub fn b64_to_uuid(b64_id: &str) -> Result<Uuid, IdError> {
   let s = b64_id.trim();
   return match s.len() {
-    24 => Ok(Uuid::from_slice(&BASE64_URL_SAFE.decode(&s)?)?),
+    24 => Ok(Uuid::from_slice(&BASE64_URL_SAFE.decode(s)?)?),
     len => Err(IdError::InvalidLength(len)),
   };
 }

@@ -45,12 +45,10 @@ impl Transaction for RqlConnection {
 
 impl Query<Vec<Migration>> for RqlConnection {
   fn query(&mut self, query: &str) -> Result<Vec<Migration>, Self::Error> {
-    return Ok(
-      query_applied_migrations(self, query).map_err(|err| match err {
-        trailbase_sqlite::Error::Rusqlite(err) => err,
-        _ => RqlError::UserFunctionError(err.into()),
-      })?,
-    );
+    return query_applied_migrations(self, query).map_err(|err| match err {
+      trailbase_sqlite::Error::Rusqlite(err) => err,
+      _ => RqlError::UserFunctionError(err.into()),
+    });
   }
 }
 
