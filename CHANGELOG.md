@@ -1,7 +1,12 @@
+## v0.35.11
+
+- Do not send change events for rolled back transactions.
+- Update dependencies.
+
 ## v0.35.10
 
 - Address issue where internal ids of read-only files can be oracled using the list API and deleted. Reported by Sparks 🙏.
-- Minor: more consitent & robust UUID parsing ignoring whitespaces.
+- Minor: more consistent & robust UUID parsing ignoring whitespaces.
 - Update dependencies.
 
 ## v0.35.9
