@@ -148,7 +148,7 @@ indoc = "2.0.8"
 mimalloc = { workspace = true }
 quoted_printable = "0.5.2"
 rcgen = "0.14.10"
-rsa = "0.10.0-rc.22"
+rsa = "0.10.0"
 schemars = "1.2.3"
 temp-dir = "0.2.0"
 testcontainers-modules = { workspace = true }
