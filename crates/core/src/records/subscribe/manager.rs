@@ -19,7 +19,7 @@ pub struct SubscriptionManager {
   record_apis: AsyncReactive<HashSet<RecordApiByName>>,
 
   /// Manages subscriptions for different connections based on `conn.id()`.
-  connections: Arc<RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>>,
+  connections: Arc<RwLock<HashMap</* conn id= */ usize, PerConnectionState>>>,
 }
 
 impl SubscriptionManager {
@@ -36,7 +36,7 @@ impl SubscriptionManager {
 
         let mut lock = connections.write();
 
-        let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
+        let mut old: HashMap<usize, PerConnectionState> = std::mem::take(&mut lock);
         for api in record_apis.iter() {
           if !api.enable_subscriptions() {
             continue;
@@ -84,7 +84,6 @@ impl SubscriptionManager {
     let state = self.get_per_connection_state(&api).await;
 
     let subscription = state
-      .clone()
       .add_table_subscription(api, user, filter, sender.clone())
       .await?;
 
@@ -101,7 +100,7 @@ impl SubscriptionManager {
     }
 
     return Ok((
-      AutoCleanupEventStream::new(receiver, state, subscription.id.clone()),
+      AutoCleanupEventStream::new(receiver, &state, subscription.id.clone()),
       subscription,
     ));
   }
@@ -133,12 +132,12 @@ impl SubscriptionManager {
     }
 
     return Ok((
-      AutoCleanupEventStream::new(receiver, state, subscription.id.clone()),
+      AutoCleanupEventStream::new(receiver, &state, subscription.id.clone()),
       subscription,
     ));
   }
 
-  pub async fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
+  pub async fn get_per_connection_state(&self, api: &RecordApi) -> PerConnectionState {
     let conn_id: usize = api.conn().id();
 
     let mut lock = self.connections.upgradable_read();
@@ -157,6 +156,7 @@ impl SubscriptionManager {
             api.connection_metadata().clone(),
             filter_record_apis(conn_id, &record_apis),
           );
+
           v.insert(state).clone()
         }
       };

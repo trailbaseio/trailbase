@@ -1,7 +1,6 @@
 use async_channel::WeakReceiver;
 use futures_util::Stream;
 use log::*;
-use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use pin_project_lite::pin_project;
 use std::collections::{HashMap, HashSet};
@@ -36,7 +35,7 @@ pub struct SubscriptionId {
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
   receiver: WeakReceiver<EventCandidate>,
-  state: Weak<PerConnectionState>,
+  state: Weak<Mutex<PerConnectionStateInternal>>,
   id: SubscriptionId,
 }
 
@@ -52,7 +51,7 @@ impl Drop for AutoCleanupEventStreamState {
         return;
       };
 
-      state.state.lock().remove_subscription(id);
+      state.lock().remove_subscription(&id);
     } else {
       debug!("Subscription cleaned up already by the sender side.");
     }
@@ -72,13 +71,13 @@ pin_project! {
 impl AutoCleanupEventStream {
   pub fn new(
     receiver: async_channel::Receiver<EventCandidate>,
-    state: Arc<PerConnectionState>,
+    state: &PerConnectionState,
     id: SubscriptionId,
   ) -> Self {
     return Self {
       state: AutoCleanupEventStreamState {
         receiver: receiver.downgrade(),
-        state: Arc::downgrade(&state),
+        state: Arc::downgrade(&state.state),
         id,
       },
       receiver,
@@ -169,12 +168,12 @@ struct PerConnectionStateInternal {
   /// exclusively lock the entire map.
   subscriptions: HashMap</* table_name= */ QualifiedName, Subscriptions>,
 
-  /// Manages the installed hooks for the associated connection. Kept alive by subscriptions above.
-  weak_hook_handle: WeakHookHandle,
+  /// Just a dead-subscriptions buffer to reduce allocations.
+  buffer: Vec<usize>,
 }
 
 impl PerConnectionStateInternal {
-  fn remove_subscription(&mut self, id: SubscriptionId) {
+  fn remove_subscription(&mut self, id: &SubscriptionId) {
     let Some(subscriptions) = self.subscriptions.get_mut(&id.table_name) else {
       return;
     };
@@ -201,8 +200,11 @@ impl PerConnectionStateInternal {
   }
 }
 
+#[derive(Clone)]
 pub struct PerConnectionState {
-  state: Mutex<PerConnectionStateInternal>,
+  state: Arc<Mutex<PerConnectionStateInternal>>,
+  /// Manages the installed hooks for the associated connection. Kept alive by subscriptions above.
+  weak_hook_handle: Arc<WeakHookHandle>,
 }
 
 impl PerConnectionState {
@@ -210,29 +212,31 @@ impl PerConnectionState {
     conn: trailbase_sqlite::Connection,
     connection_metadata: Arc<ConnectionMetadata>,
     record_apis: HashSet<RecordApiByName>,
-  ) -> Arc<Self> {
-    let state = Arc::new(Self {
-      state: Mutex::new(PerConnectionStateInternal {
-        connection_metadata,
-        record_apis,
-        subscriptions: Default::default(),
-        // temporary dummy:
-        weak_hook_handle: WeakHookHandle::new(conn.clone(), |_ev| {}),
-      }),
-    });
+  ) -> Self {
+    let state = Arc::new(Mutex::new(PerConnectionStateInternal {
+      connection_metadata,
+      record_apis,
+      subscriptions: Default::default(),
+      buffer: Default::default(),
+    }));
 
-    state.state.lock().weak_hook_handle = WeakHookHandle::new(conn, {
+    let weak_hook_handle = Arc::new(WeakHookHandle::new(conn, {
       let state = state.clone();
 
       move |event| match event {
         BrokerEvent::EventLoss => {
-          state.state.lock().subscriptions.clear();
+          state.lock().subscriptions.clear();
         }
-        BrokerEvent::Event(event) => broker(&state, event),
+        BrokerEvent::Event(event) => {
+          broker(&mut state.lock(), event);
+        }
       }
-    });
+    }));
 
-    return state;
+    return Self {
+      state,
+      weak_hook_handle,
+    };
   }
 
   pub fn update(
@@ -254,58 +258,77 @@ impl PerConnectionState {
   }
 
   pub async fn add_record_subscription(
-    self: Arc<Self>,
+    &self,
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
     sender: async_channel::Sender<EventCandidate>,
   ) -> Result<Arc<Subscription>, RecordError> {
-    let table_name = api.table_name();
-    let pk_column = &api.record_pk_column().column.name;
+    async fn get_row_id(
+      api: &RecordApi,
+      record: trailbase_sqlite::Value,
+    ) -> Result<i64, RecordError> {
+      // NOTE: It's important that the handler already did ACL checking to not allow unprivileged
+      // record enumerations.
+      return api
+        .conn()
+        .read_query_row_get(
+          format!(
+            "SELECT _rowid_ FROM {table_name} WHERE \"{pk_column}\" = $1",
+            table_name = api.table_name(),
+            pk_column = api.record_pk_column().column.name,
+          ),
+          (record,),
+          0,
+        )
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?
+        .ok_or(RecordError::RecordNotFound);
+    }
 
-    let Some(row_id): Option<i64> = api
-      .conn()
-      .read_query_row_get(
-        format!(r#"SELECT _rowid_ FROM {table_name} WHERE "{pk_column}" = $1"#),
-        [record],
-        0,
-      )
-      .await?
-    else {
-      return Err(RecordError::RecordNotFound);
+    // First check that the requested record exists.
+    let row_id = get_row_id(&api, record.clone()).await?;
+
+    let qualified_name = api.qualified_name().clone();
+    let id = SubscriptionId {
+      table_name: qualified_name.clone(),
+      row_id: Some(row_id),
+      sub_id: SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst),
     };
 
-    let qualified_name = api.qualified_name();
-
-    let mut lock = self.state.lock();
     let subscription_entry = Arc::new(Subscription {
-      id: SubscriptionId {
-        table_name: qualified_name.clone(),
-        row_id: Some(row_id),
-        sub_id: SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst),
-      },
+      id: id.clone(),
       record_api_name: api.api_name().to_string(),
       user,
       sender,
       filter: Filter::Passthrough,
       candidate_seq: AtomicI64::default(),
-      _handle: lock.weak_hook_handle.handle()?,
+      _handle: self.weak_hook_handle.handle()?,
     });
 
-    lock
+    self
+      .state
+      .lock()
       .subscriptions
-      .entry(qualified_name.clone())
+      .entry(qualified_name)
       .or_default()
       .record
       .entry(row_id)
       .or_default()
       .push(subscription_entry.clone());
 
+    // Finally check again that the record still exists to avoid racing concurrent record deletion.
+    // Otherwise, we may have installed a hook but missed the deletion event, thus orphaning a
+    // subscription.
+    if let Err(_err) = get_row_id(&api, record).await {
+      self.state.lock().remove_subscription(&id);
+    }
+
     return Ok(subscription_entry);
   }
 
   pub async fn add_table_subscription(
-    self: Arc<Self>,
+    &self,
     api: RecordApi,
     user: Option<User>,
     filter: Option<ValueOrComposite>,
@@ -317,9 +340,8 @@ impl PerConnectionState {
       Filter::Passthrough
     };
 
-    let qualified_name = api.qualified_name();
+    let qualified_name = api.qualified_name().clone();
 
-    let mut lock = self.state.lock();
     let subscription_entry = Arc::new(Subscription {
       id: SubscriptionId {
         table_name: qualified_name.clone(),
@@ -331,12 +353,14 @@ impl PerConnectionState {
       sender,
       filter,
       candidate_seq: AtomicI64::default(),
-      _handle: lock.weak_hook_handle.handle()?,
+      _handle: self.weak_hook_handle.handle()?,
     });
 
-    lock
+    self
+      .state
+      .lock()
       .subscriptions
-      .entry(qualified_name.clone())
+      .entry(qualified_name)
       .or_default()
       .table
       .push(subscription_entry.clone());
@@ -365,42 +389,33 @@ impl PerConnectionState {
   }
 }
 
-fn broker_subscriptions<F>(
+#[inline]
+fn broker_subscriptions(
   subs: &[Arc<Subscription>],
-  payload: &Lazy<Arc<EventPayload>, F>,
-) -> Vec<usize>
-where
-  F: FnOnce() -> Arc<EventPayload>,
-{
-  let payload = Lazy::force(payload);
-
-  return subs
-    .iter()
-    .enumerate()
-    .filter_map(|(idx, sub)| {
-      // Cloning the event. It's important that we use a try_send here to not block other
-      // subscriptions if a subscriber is slow and their channel fills up.
-      if let Err(err) = sub.sender.try_send(EventCandidate {
-        payload: payload.clone(),
-        seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
-      }) {
-        match err {
-          async_channel::TrySendError::Full(ev) => {
-            debug!("Channel full, dropping event: {ev:?}");
-          }
-          async_channel::TrySendError::Closed(_ev) => {
-            return Some(idx);
-          }
+  payload: &Arc<EventPayload>,
+  dead_subscriptions: &mut Vec<usize>,
+) {
+  for (idx, sub) in subs.iter().enumerate() {
+    // Cloning the event. It's important that we use a try_send here to not block other
+    // subscriptions if a subscriber is slow and their channel fills up.
+    if let Err(err) = sub.sender.try_send(EventCandidate {
+      payload: payload.clone(),
+      seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
+    }) {
+      match err {
+        async_channel::TrySendError::Full(ev) => {
+          debug!("Channel full, dropping event: {ev:?}");
         }
-      };
-
-      return None;
-    })
-    .collect();
+        async_channel::TrySendError::Closed(_ev) => {
+          dead_subscriptions.push(idx);
+        }
+      }
+    };
+  }
 }
 
 /// Broker event to various subscriptions.
-fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
+fn broker(state: &mut PerConnectionStateInternal, event: CommittedEvent) {
   let CommittedEvent {
     action,
     table_name,
@@ -408,12 +423,9 @@ fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
     record,
   } = event;
 
-  let mut state = state.state.lock();
-
   // If table_metadata is missing, the config/schema must have changed, thus removing the
   // subscriptions.
-  let connection_metadata = state.connection_metadata.clone();
-  let Some(table_metadata) = connection_metadata.get_table(&table_name) else {
+  let Some(table_metadata) = state.connection_metadata.get_table(&table_name) else {
     warn!("Table {table_name:?} not found. Removing subscriptions");
 
     state.subscriptions.remove(&table_name);
@@ -430,7 +442,7 @@ fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
   }
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let record_and_event: Lazy<Arc<EventPayload>, _> = Lazy::new(move || {
+  let record_and_event: Arc<EventPayload> = {
     // Join values with column names. We need index access for `record_to_json_expanded` below and
     // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
     // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
@@ -441,7 +453,7 @@ fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
       .collect();
 
-    return match record_to_json_expand(&table_metadata.column_metadata, &[], &record, None) {
+    match record_to_json_expand(&table_metadata.column_metadata, &[], &record, None) {
       Ok(json_obj) => Arc::new(match action {
         RecordAction::Insert => EventPayload::insert(json_obj, record),
         RecordAction::Update => EventPayload::update(json_obj, record),
@@ -455,25 +467,34 @@ fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
           None
         },
       })),
-    };
-  });
+    }
+  };
 
   // NOTE: If/when latency becomes an issue we could do all the brokering (both records & tables as
   // well as across subscriptions) in parallel, however it's already a non-blocking buffered send.
 
   // First broker record subscriptions.
+  let dead_subscriptions = &mut state.buffer;
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
-    let dead = broker_subscriptions(record_subscriptions, &record_and_event);
+    debug_assert!(
+      !record_subscriptions.is_empty(),
+      "should have been cleaned up"
+    );
 
-    for idx in dead.iter().rev() {
+    dead_subscriptions.clear();
+    broker_subscriptions(record_subscriptions, &record_and_event, dead_subscriptions);
+
+    for idx in dead_subscriptions.iter().rev() {
       record_subscriptions.remove(*idx);
     }
   }
 
   // Then broker table subscriptions.
   if !subscriptions.table.is_empty() {
-    let dead = broker_subscriptions(&subscriptions.table, &record_and_event);
-    for idx in dead.iter().rev() {
+    dead_subscriptions.clear();
+    broker_subscriptions(&subscriptions.table, &record_and_event, dead_subscriptions);
+
+    for idx in dead_subscriptions.iter().rev() {
       subscriptions.table.remove(*idx);
     }
   }

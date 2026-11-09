@@ -297,57 +297,62 @@ mod tests {
 
   #[tokio::test]
   async fn hook_lifecycle() {
-    let conn = Connection::open_in_memory().unwrap();
-    conn
-      .execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY) STRICT;")
-      .await
-      .unwrap();
-
-    conn
-      .execute_batch("INSERT INTO test (id) VALUES (1), (2);")
-      .await
-      .unwrap();
-
-    let (sender, receiver) = flume::bounded(CAPACITY);
-    let weak = WeakHookHandle::new(conn.clone(), move |event| {
-      sender.send(event).unwrap();
-    });
-
-    assert_eq!(0, weak.state.read().strong_count());
-
-    {
-      let strong = weak.handle().unwrap();
-
+    for _ in 0..20 {
+      let conn = Connection::open_in_memory().unwrap();
       conn
-        .execute_batch("INSERT INTO test (id) VALUES (3);")
+        .execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY) STRICT;")
         .await
         .unwrap();
 
-      drop(strong);
+      conn
+        .execute_batch("INSERT INTO test (id) VALUES (1), (2);")
+        .await
+        .unwrap();
+
+      let (sender, receiver) = flume::bounded(CAPACITY);
+      let weak = WeakHookHandle::new(conn.clone(), move |event| {
+        sender.send(event).unwrap();
+      });
+
+      assert_eq!(0, weak.state.read().strong_count());
+
+      {
+        let strong = weak.handle().unwrap();
+
+        conn
+          .execute_batch("INSERT INTO test (id) VALUES (3);")
+          .await
+          .unwrap();
+
+        drop(strong);
+      }
+
+      assert_eq!(0, weak.state.read().strong_count());
+
+      conn
+        .execute_batch("INSERT INTO test (id) VALUES (4);")
+        .await
+        .unwrap();
+
+      // Wait for the broker thread to start brokering.
+      let mut received = vec![receiver.recv_async().await.unwrap()];
+      // Make sure there are on other pending events.
+      received.extend(receiver.drain());
+
+      assert_eq!(1, received.len());
+
+      let BrokerEvent::Event(ref event) = received[0] else {
+        panic!("expected event");
+      };
+
+      assert_eq!(
+        QualifiedName {
+          name: "test".to_string(),
+          database_schema: None
+        },
+        event.table_name
+      );
+      assert_eq!(Value::Integer(3), event.record[0]);
     }
-
-    assert_eq!(0, weak.state.read().strong_count());
-
-    conn
-      .execute_batch("INSERT INTO test (id) VALUES (4);")
-      .await
-      .unwrap();
-
-    let received: Vec<_> = receiver.drain().collect();
-
-    assert_eq!(1, received.len());
-
-    let BrokerEvent::Event(ref event) = received[0] else {
-      panic!("expected event");
-    };
-
-    assert_eq!(
-      QualifiedName {
-        name: "test".to_string(),
-        database_schema: None
-      },
-      event.table_name
-    );
-    assert_eq!(Value::Integer(3), event.record[0]);
   }
 }

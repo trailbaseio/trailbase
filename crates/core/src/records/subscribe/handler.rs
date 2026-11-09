@@ -455,7 +455,7 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
+        let receiver = AutoCleanupEventStream::new(receiver, &conn_state, subscription.id.clone());
 
         broker(state, subscription, receiver, &mut ws_sender, false).await
       }))
@@ -512,7 +512,7 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
+        let receiver = AutoCleanupEventStream::new(receiver, &conn_state, subscription.id.clone());
 
         broker(state, subscription, receiver, &mut ws_sender, true).await;
       }))
