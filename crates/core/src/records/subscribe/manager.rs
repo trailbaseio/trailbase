@@ -1,4 +1,4 @@
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -10,8 +10,7 @@ use crate::auth::User;
 use crate::records::RecordError;
 use crate::records::subscribe::event::EventPayload;
 use crate::records::subscribe::state::{
-  AutoCleanupEventStream, EventCandidate, PerConnectionState, PerConnectionStateInternal,
-  Subscription,
+  AutoCleanupEventStream, EventCandidate, PerConnectionState, Subscription,
 };
 use crate::records::{RecordApi, RecordApiByName};
 
@@ -53,13 +52,8 @@ impl SubscriptionManager {
               continue;
             };
 
-            {
-              let mut state = existing.state.lock();
-              // Update metadata and add back.
-              state.connection_metadata = first.connection_metadata().clone();
-              state.record_apis = apis;
-            }
-
+            // Update metadata and add back.
+            existing.update(first.connection_metadata().clone(), apis);
             lock.insert(conn_id, existing);
           }
         }
@@ -73,12 +67,10 @@ impl SubscriptionManager {
   }
 
   pub fn shutdown(&self) {
-    let connections = self.connections.write();
-    if !connections.is_empty() {
-      for (db, conn) in connections.iter() {
-        log::debug!("SubscriptionManager::shutdown (conn id = {db})");
-        conn.shutdown();
-      }
+    let mut connections = self.connections.write();
+    for (db, conn) in connections.drain() {
+      log::debug!("SubscriptionManager::shutdown (conn id = {db})");
+      conn.shutdown();
     }
   }
 
@@ -160,14 +152,11 @@ impl SubscriptionManager {
       return match m.entry(conn_id) {
         Entry::Occupied(v) => v.get().clone(),
         Entry::Vacant(v) => {
-          let state = Arc::new(PerConnectionState {
-            state: Mutex::new(PerConnectionStateInternal {
-              connection_metadata: api.connection_metadata().clone(),
-              record_apis: filter_record_apis(conn_id, &record_apis),
-              conn: api.conn().clone(),
-              subscriptions: Default::default(),
-            }),
-          });
+          let state = PerConnectionState::new(
+            api.conn().clone(),
+            api.connection_metadata().clone(),
+            filter_record_apis(conn_id, &record_apis),
+          );
           v.insert(state).clone()
         }
       };
@@ -178,11 +167,7 @@ impl SubscriptionManager {
   pub fn num_record_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.connections.read().values() {
-      for (_table_name, subs) in state.state.lock().subscriptions.iter() {
-        for record in subs.record.values() {
-          count += record.len();
-        }
-      }
+      count += state.num_record_subscriptions();
     }
     return count;
   }
@@ -191,9 +176,7 @@ impl SubscriptionManager {
   pub fn num_table_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.connections.read().values() {
-      for (_table_name, subs) in state.state.lock().subscriptions.iter() {
-        count += subs.table.len();
-      }
+      count += state.num_table_subscriptions();
     }
     return count;
   }

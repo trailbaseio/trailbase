@@ -1,7 +1,7 @@
 use log::*;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rusqlite::hooks::{Action, PreUpdateCase};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::{
   Connection, Value,
@@ -18,7 +18,7 @@ pub enum RecordAction {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PreupdateHookEvent {
+pub struct CommittedEvent {
   pub action: RecordAction,
   pub table_name: QualifiedName,
   pub row_id: i64,
@@ -26,7 +26,12 @@ pub struct PreupdateHookEvent {
   pub record: Vec<Value>,
 }
 
-pub fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
+pub enum BrokerEvent {
+  Event(CommittedEvent),
+  EventLoss,
+}
+
+fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
   let mut lock = conn
     .write_lock()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -48,9 +53,9 @@ pub fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
   return Ok(());
 }
 
-pub fn install_hook(
+fn install_hook(
   conn: &Connection,
-) -> Result<flume::Receiver<(usize, PreupdateHookEvent)>, RecordError> {
+) -> Result<flume::Receiver<(usize, CommittedEvent)>, RecordError> {
   let (sender, receiver) = flume::bounded(CAPACITY);
   let mut lock = conn
     .write_lock()
@@ -125,7 +130,7 @@ pub fn install_hook(
             return;
           };
 
-          buffer.lock().push(PreupdateHookEvent {
+          buffer.lock().push(CommittedEvent {
             action,
             table_name: QualifiedName {
               name: table_name.to_string(),
@@ -146,6 +151,94 @@ pub fn install_hook(
   return Ok(receiver);
 }
 
+struct HookState {
+  conn: Connection,
+}
+
+impl HookState {
+  fn new(
+    conn: Connection,
+    broker: Arc<dyn Fn(BrokerEvent) + Sync + Send>,
+  ) -> Result<Self, RecordError> {
+    let receiver = install_hook(&conn)?;
+
+    // Spawn broker task.
+    let conn_id = conn.id();
+    let _join_handle = std::thread::Builder::new()
+      .name(format!("subscription_hook_{conn_id}"))
+      .spawn(move || {
+        debug!("Subscription broker task started, conn={conn_id}");
+
+        let mut expected = 1;
+        while let Ok((cnt, event)) = receiver.recv() {
+          if cnt != expected {
+            // QUESTION: There's several ways we could deal with event loss. We probably should
+            // not  create back pressure on the `preupdate_hook` and gunk up SQLite access. We
+            // could try to deliver event loss messages to all receivers but that may just make
+            // the problem worse.
+            broker(BrokerEvent::EventLoss);
+            break;
+          }
+
+          expected += 1;
+
+          broker(BrokerEvent::Event(event));
+        }
+
+        debug!("Channel closed: terminating subscription broker task.");
+      })
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(Self { conn });
+  }
+}
+
+impl Drop for HookState {
+  fn drop(&mut self) {
+    // Note: uninstalling the hooks will drop the senders, which will in turn terminate the broker
+    // thread.
+    if let Err(err) = uninstall_hook(&self.conn) {
+      error!("Failed to uninstall hook: {err}");
+    }
+  }
+}
+
+/// An active handle keeps the hook alive.
+pub struct HookHandle {
+  _state: Arc<HookState>,
+}
+
+pub struct WeakHookHandle {
+  conn: Connection,
+  broker: Arc<dyn Fn(BrokerEvent) + Sync + Send>,
+  state: RwLock<Weak<HookState>>,
+}
+
+impl WeakHookHandle {
+  pub fn new(conn: Connection, broker: impl Fn(BrokerEvent) + Sync + Send + 'static) -> Self {
+    return Self {
+      conn,
+      broker: Arc::new(broker),
+      state: RwLock::new(Weak::new()),
+    };
+  }
+
+  pub fn handle(&self) -> Result<HookHandle, RecordError> {
+    let mut lock = self.state.upgradable_read();
+    if let Some(state) = lock.upgrade() {
+      return Ok(HookHandle { _state: state });
+    }
+
+    let state = lock.with_upgraded(|lock| -> Result<Arc<HookState>, RecordError> {
+      let new_state = Arc::new(HookState::new(self.conn.clone(), self.broker.clone())?);
+      *lock = Arc::downgrade(&new_state);
+      return Ok(new_state);
+    })?;
+
+    return Ok(HookHandle { _state: state });
+  }
+}
+
 const NO_PREUPDATE_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 const NO_ROLLBACK_HOOK: Option<fn()> = None;
 const NO_COMMIT_HOOK: Option<fn() -> bool> = None;
@@ -159,13 +252,7 @@ mod tests {
   async fn hook_test() {
     let conn = Connection::open_in_memory().unwrap();
     conn
-      .execute_batch(
-        "
-          CREATE TABLE test (
-            id    INTEGER PRIMARY KEY
-          ) STRICT;
-        ",
-      )
+      .execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY) STRICT;")
       .await
       .unwrap();
 
@@ -206,5 +293,61 @@ mod tests {
     uninstall_hook(&conn).unwrap();
 
     assert_eq!(0, receiver.sender_count());
+  }
+
+  #[tokio::test]
+  async fn hook_lifecycle() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn
+      .execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY) STRICT;")
+      .await
+      .unwrap();
+
+    conn
+      .execute_batch("INSERT INTO test (id) VALUES (1), (2);")
+      .await
+      .unwrap();
+
+    let (sender, receiver) = flume::bounded(CAPACITY);
+    let weak = WeakHookHandle::new(conn.clone(), move |event| {
+      sender.send(event).unwrap();
+    });
+
+    assert_eq!(0, weak.state.read().strong_count());
+
+    {
+      let strong = weak.handle().unwrap();
+
+      conn
+        .execute_batch("INSERT INTO test (id) VALUES (3);")
+        .await
+        .unwrap();
+
+      drop(strong);
+    }
+
+    assert_eq!(0, weak.state.read().strong_count());
+
+    conn
+      .execute_batch("INSERT INTO test (id) VALUES (4);")
+      .await
+      .unwrap();
+
+    let received: Vec<_> = receiver.drain().collect();
+
+    assert_eq!(1, received.len());
+
+    let BrokerEvent::Event(ref event) = received[0] else {
+      panic!("expected event");
+    };
+
+    assert_eq!(
+      QualifiedName {
+        name: "test".to_string(),
+        database_schema: None
+      },
+      event.table_name
+    );
+    assert_eq!(Value::Integer(3), event.record[0]);
   }
 }

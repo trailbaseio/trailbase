@@ -17,7 +17,7 @@ use crate::auth::User;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
 use crate::records::subscribe::event::{EventError, EventPayload, Record};
 use crate::records::subscribe::hook::{
-  PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
+  BrokerEvent, CommittedEvent, HookHandle, RecordAction, WeakHookHandle,
 };
 use crate::records::{RecordApi, RecordApiByName, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
@@ -100,7 +100,6 @@ impl Stream for AutoCleanupEventStream {
   }
 }
 
-#[derive(Debug)]
 pub struct Subscription {
   /// Id uniquely identifying this subscription.
   pub id: SubscriptionId,
@@ -115,6 +114,9 @@ pub struct Subscription {
   pub sender: async_channel::Sender<EventCandidate>,
 
   pub candidate_seq: AtomicI64,
+
+  /// Keeps the SQLite connection hooks alive.
+  pub _handle: HookHandle,
 }
 
 // Represents a change event that needs further filtering, e.g. ACLs.
@@ -153,26 +155,26 @@ impl Subscriptions {
   }
 }
 
-pub struct PerConnectionStateInternal {
-  /// Metadata: always updated together when config -> record APIs change.
-  pub record_apis: HashSet<RecordApiByName>,
-
+struct PerConnectionStateInternal {
   /// Denormalized metadata. We could also grab this from:
   ///   `record_apis.read().nth(0).unwrap().connection_metadata()`.
-  pub connection_metadata: Arc<ConnectionMetadata>,
+  connection_metadata: Arc<ConnectionMetadata>,
 
-  /// Should be the same as for all `record_apis` above.
-  pub conn: trailbase_sqlite::Connection,
+  /// Metadata: always updated together when config -> record APIs change.
+  record_apis: HashSet<RecordApiByName>,
 
   /// Map from table name to row id to list of subscriptions.
   ///
   /// NOTE: Use layered locking to allow cleaning up per-table subscriptions w/o having to
   /// exclusively lock the entire map.
-  pub subscriptions: HashMap</* table_name= */ QualifiedName, Subscriptions>,
+  subscriptions: HashMap</* table_name= */ QualifiedName, Subscriptions>,
+
+  /// Manages the installed hooks for the associated connection. Kept alive by subscriptions above.
+  weak_hook_handle: WeakHookHandle,
 }
 
 impl PerConnectionStateInternal {
-  pub fn remove_subscription(&mut self, id: SubscriptionId) {
+  fn remove_subscription(&mut self, id: SubscriptionId) {
     let Some(subscriptions) = self.subscriptions.get_mut(&id.table_name) else {
       return;
     };
@@ -195,74 +197,60 @@ impl PerConnectionStateInternal {
 
     if subscriptions.is_empty() {
       self.subscriptions.remove(&id.table_name);
-      if self.subscriptions.is_empty() {
-        let _ = uninstall_hook(&self.conn);
-      }
     }
   }
 }
 
 pub struct PerConnectionState {
-  pub state: Mutex<PerConnectionStateInternal>,
+  state: Mutex<PerConnectionStateInternal>,
 }
 
 impl PerConnectionState {
+  pub fn new(
+    conn: trailbase_sqlite::Connection,
+    connection_metadata: Arc<ConnectionMetadata>,
+    record_apis: HashSet<RecordApiByName>,
+  ) -> Arc<Self> {
+    let state = Arc::new(Self {
+      state: Mutex::new(PerConnectionStateInternal {
+        connection_metadata,
+        record_apis,
+        subscriptions: Default::default(),
+        // temporary dummy:
+        weak_hook_handle: WeakHookHandle::new(conn.clone(), |_ev| {}),
+      }),
+    });
+
+    state.state.lock().weak_hook_handle = WeakHookHandle::new(conn, {
+      let state = state.clone();
+
+      move |event| match event {
+        BrokerEvent::EventLoss => {
+          state.state.lock().subscriptions.clear();
+        }
+        BrokerEvent::Event(event) => broker(&state, event),
+      }
+    });
+
+    return state;
+  }
+
+  pub fn update(
+    &self,
+    connection_metadata: Arc<ConnectionMetadata>,
+    record_apis: HashSet<RecordApiByName>,
+  ) {
+    let mut lock = self.state.lock();
+    lock.connection_metadata = connection_metadata;
+    lock.record_apis = record_apis;
+  }
+
   pub fn shutdown(&self) {
     let mut state = self.state.lock();
 
     for subs in std::mem::take(&mut state.subscriptions).values_mut() {
       subs.shutdown();
     }
-
-    let _ = uninstall_hook(&state.conn);
-  }
-
-  fn add_hook(self: &Arc<Self>, api: RecordApi) -> Result<(), RecordError> {
-    let conn = api.conn().clone();
-    let state = self.clone();
-
-    let receiver = install_hook(&conn)?;
-
-    // Spawn broker task.
-    let _join_handle = std::thread::Builder::new()
-      .name("subscriptions".to_string())
-      .spawn(move || {
-        debug!("Subscription broker task started.");
-
-        let mut expected = 1;
-        loop {
-          if receiver.sender_count() == 0 {
-            break;
-          }
-
-          let event = match receiver.recv() {
-            Ok((cnt, event)) => {
-              if cnt != expected {
-                // QUESTION: There's several ways we could deal with failure. We
-                // probably shouldn't create back pressure on the preupdate_hook and gunk up the
-                // SQLite access. We could try to deliver event loss messages to all receivers but
-                // that may just make the problem worse. We're probably at limit already
-                // if we don't manage to catch up. Should we just disconnect all subscriptions?
-                state.state.lock().subscriptions.clear();
-                break;
-              }
-              expected += 1;
-
-              event
-            }
-            Err(flume::RecvError::Disconnected) => {
-              break;
-            }
-          };
-
-          broker(&conn, &state, event);
-        }
-
-        debug!("Channel closed: terminating subscription broker task.");
-      })
-      .map_err(|err| RecordError::Internal(err.into()))?;
-
-    return Ok(());
   }
 
   pub async fn add_record_subscription(
@@ -288,6 +276,8 @@ impl PerConnectionState {
     };
 
     let qualified_name = api.qualified_name();
+
+    let mut lock = self.state.lock();
     let subscription_entry = Arc::new(Subscription {
       id: SubscriptionId {
         table_name: qualified_name.clone(),
@@ -299,30 +289,17 @@ impl PerConnectionState {
       sender,
       filter: Filter::Passthrough,
       candidate_seq: AtomicI64::default(),
+      _handle: lock.weak_hook_handle.handle()?,
     });
 
-    let should_install_hook: bool = {
-      let mut empty = false;
-      self
-        .state
-        .lock()
-        .subscriptions
-        .entry(qualified_name.clone())
-        .or_insert_with(|| {
-          empty = true;
-          return Default::default();
-        })
-        .record
-        .entry(row_id)
-        .or_default()
-        .push(subscription_entry.clone());
-
-      empty
-    };
-
-    if should_install_hook {
-      self.add_hook(api.clone())?;
-    }
+    lock
+      .subscriptions
+      .entry(qualified_name.clone())
+      .or_default()
+      .record
+      .entry(row_id)
+      .or_default()
+      .push(subscription_entry.clone());
 
     return Ok(subscription_entry);
   }
@@ -341,6 +318,8 @@ impl PerConnectionState {
     };
 
     let qualified_name = api.qualified_name();
+
+    let mut lock = self.state.lock();
     let subscription_entry = Arc::new(Subscription {
       id: SubscriptionId {
         table_name: qualified_name.clone(),
@@ -352,33 +331,37 @@ impl PerConnectionState {
       sender,
       filter,
       candidate_seq: AtomicI64::default(),
+      _handle: lock.weak_hook_handle.handle()?,
     });
 
-    let install_hook: bool = {
-      let mut lock = self.state.lock();
-      let empty = lock.subscriptions.is_empty();
-
-      let subscriptions = lock
-        .subscriptions
-        .entry(qualified_name.clone())
-        .or_default();
-
-      subscriptions.table.push(subscription_entry.clone());
-
-      empty
-    };
-
-    if install_hook {
-      self.add_hook(api.clone())?;
-    }
+    lock
+      .subscriptions
+      .entry(qualified_name.clone())
+      .or_default()
+      .table
+      .push(subscription_entry.clone());
 
     return Ok(subscription_entry);
   }
-}
 
-impl Drop for PerConnectionState {
-  fn drop(&mut self) {
-    let _ = uninstall_hook(&self.state.lock().conn);
+  #[cfg(test)]
+  pub fn num_record_subscriptions(&self) -> usize {
+    let mut count: usize = 0;
+    for (_table_name, subs) in self.state.lock().subscriptions.iter() {
+      for record in subs.record.values() {
+        count += record.len();
+      }
+    }
+    return count;
+  }
+
+  #[cfg(test)]
+  pub fn num_table_subscriptions(&self) -> usize {
+    let mut count: usize = 0;
+    for (_table_name, subs) in self.state.lock().subscriptions.iter() {
+      count += subs.table.len();
+    }
+    return count;
   }
 }
 
@@ -417,12 +400,8 @@ where
 }
 
 /// Broker event to various subscriptions.
-fn broker(
-  conn: &trailbase_sqlite::Connection,
-  state: &Arc<PerConnectionState>,
-  event: PreupdateHookEvent,
-) {
-  let PreupdateHookEvent {
+fn broker(state: &Arc<PerConnectionState>, event: CommittedEvent) {
+  let CommittedEvent {
     action,
     table_name,
     row_id,
@@ -438,9 +417,6 @@ fn broker(
     warn!("Table {table_name:?} not found. Removing subscriptions");
 
     state.subscriptions.remove(&table_name);
-    if state.subscriptions.is_empty() {
-      let _ = uninstall_hook(conn);
-    }
     return;
   };
 
@@ -448,7 +424,8 @@ fn broker(
   let Some(subscriptions) = state.subscriptions.get_mut(&table_name) else {
     return;
   };
-  if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&row_id) {
+  let record_subscriptions = subscriptions.record.get_mut(&row_id);
+  if subscriptions.table.is_empty() && record_subscriptions.is_none() {
     return;
   }
 
@@ -481,10 +458,10 @@ fn broker(
     };
   });
 
-  // First broker record subscriptions.
-  //
   // NOTE: If/when latency becomes an issue we could do all the brokering (both records & tables as
-  // well as across subscriptions) in parallel.
+  // well as across subscriptions) in parallel, however it's already a non-blocking buffered send.
+
+  // First broker record subscriptions.
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
     let dead = broker_subscriptions(record_subscriptions, &record_and_event);
 
@@ -494,13 +471,11 @@ fn broker(
   }
 
   // Then broker table subscriptions.
-  let dead = broker_subscriptions(&subscriptions.table, &record_and_event);
-  for idx in dead.iter().rev() {
-    subscriptions.table.remove(*idx);
-  }
-
-  if subscriptions.is_empty() {
-    let _ = uninstall_hook(conn);
+  if !subscriptions.table.is_empty() {
+    let dead = broker_subscriptions(&subscriptions.table, &record_and_event);
+    for idx in dead.iter().rev() {
+      subscriptions.table.remove(*idx);
+    }
   }
 }
 
