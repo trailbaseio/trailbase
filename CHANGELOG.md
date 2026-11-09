@@ -1,3 +1,9 @@
+## v0.35.12
+
+- Internal: simplify hook/subscription lifecycle. Subscriptions keep hook alive.
+- Fix race between record-level-subscriptions and record deletion, which could lead to an orphaned subscription.
+- Update dependencies.
+
 ## v0.35.11
 
 - Do not send change events for rolled back transactions.
