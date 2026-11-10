@@ -149,7 +149,7 @@ mimalloc = { workspace = true }
 quoted_printable = "0.5.2"
 rcgen = "0.14.10"
 rsa = "0.10.0"
-schemars = "1.2.3"
+schemars = { workspace = true }
 temp-dir = "0.2.0"
 testcontainers-modules = { workspace = true }
 tower = { version = "0.5.3", features = ["util"] }

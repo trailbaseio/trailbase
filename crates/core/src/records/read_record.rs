@@ -678,7 +678,7 @@ mod tests {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let RawJson(map) = read_record_handler(
+    let RawJson(obj) = read_record_handler(
       State(state.clone()),
       Path(record_path.clone()),
       Query(ReadRecordQuery::default()),
@@ -687,9 +687,9 @@ mod tests {
     .await
     .unwrap();
 
-    let map = to_object(&map);
+    let obj = to_object(&obj);
 
-    let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
+    let file_upload: FileUpload = serde_json::from_value(obj.get("file").unwrap().clone()).unwrap();
     assert_eq!(
       file_upload.original_filename(),
       Some("bar"),
@@ -836,8 +836,8 @@ mod tests {
         assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
 
         let uuid = f.objectstore_id();
-        assert!(!uuid.is_empty(), "empty file/object uuid");
-        let file_path = object_store::path::Path::from(uuid);
+        assert_eq!(4, uuid.get_version_num(), "invalid file/object uuid");
+        let file_path = object_store::path::Path::from(uuid.to_string());
         assert_eq!(
           *expected,
           read_objectstore_file(state.objectstore(), &file_path).await

@@ -103,6 +103,7 @@ pub fn record_to_json_expand_ref<'a>(
         return match json {
           JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
             let file_metadata: JsonObject = serde_json::from_str(str)?;
+
             Ok((
               column.name.as_str(),
               Value::ObjectOwned(strip_file_metadata_id(file_metadata)),

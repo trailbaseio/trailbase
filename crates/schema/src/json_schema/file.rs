@@ -77,30 +77,32 @@ impl FileUploadInput {
 
     return Ok((
       name,
-      FileUpload::new(uuid::Uuid::new_v4(), filename, content_type, mime_type),
+      FileUpload::new(Uuid::new_v4(), filename, content_type, mime_type),
       data,
     ));
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-// NOTE: Currently we must allow unknown fields since we re-use the same json schema for API inputs
-// and storage. There's an additional "name" field referencing form input's name.
-#[cfg_attr(not(debug_assertions), serde(deny_unknown_fields))]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
-  #[serde(default, skip_serializing_if = "String::is_empty")]
-  id: String,
+  ///
+  /// TODO: We use this struct both for in-DB representation and JSON-schema/serialization. However,
+  /// we strip the the ID, this is why we have this schemars+serde weirdness here. We should split
+  /// the two use-cases into different representations.
+  #[schemars(skip)]
+  #[serde(default = "Uuid::default")]
+  id: Uuid,
 
   /// The file's original file name.
   #[serde(skip_serializing_if = "Option::is_none")]
   original_filename: Option<String>,
 
-  /// A unique filename derived from original. Helps to address content caching issues with
-  /// proxies, CDNs, ... .
+  /// A unique filename derived from `original_filename`. Helps to address content caching issues
+  /// with proxies, CDNs, ... .
   filename: String,
 
-  /// The file's user-provided content type.
+  /// The file's content-type as provided by a user.
   #[serde(skip_serializing_if = "Option::is_none")]
   content_type: Option<String>,
 
@@ -117,7 +119,7 @@ impl FileUpload {
     mime_type: Option<String>,
   ) -> Self {
     return Self {
-      id: id.to_string(),
+      id,
       filename: build_unique_filename(original_filename.as_deref()),
       original_filename,
       content_type,
@@ -125,7 +127,8 @@ impl FileUpload {
     };
   }
 
-  pub fn objectstore_id(&self) -> &str {
+  pub fn objectstore_id(&self) -> &Uuid {
+    debug_assert_eq!(4, self.id.get_version_num());
     return &self.id;
   }
 

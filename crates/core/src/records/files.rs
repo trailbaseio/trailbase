@@ -36,7 +36,7 @@ pub(crate) async fn read_file_into_response(
   let result = state
     .objectstore()
     .get(&object_store::path::Path::from(
-      file_upload.objectstore_id(),
+      file_upload.objectstore_id().to_string(),
     ))
     .await?;
 
@@ -128,7 +128,8 @@ pub(crate) async fn delete_files_marked_for_deletion(
       ConnectionType::Pg => {
         conn
           .write_query_rows(
-            // FIXME: The sqlite query doesn't work because record_rowids are i64 as opposed to TIDs.
+            // TODO: Can we unify the branch? The SQLite query doesn't work for Postgres because
+            // record_rowids are i64 as opposed to TIDs.
             format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 RETURNING {columns}"#, columns = FileDeletionsDb::COLUMNS),
             params!(qualified_table_name.escaped_string()),
           ).await?
@@ -146,7 +147,8 @@ pub(crate) async fn delete_files_marked_for_deletion(
       ConnectionType::Pg => {
         conn
           .write_query_rows(
-            // FIXME: The sqlite query doesn't work because record_rowids are i64 as opposed to TIDs.
+            // TODO: Can we unify the branch? The SQLite query doesn't work for Postgres because
+            // record_rowids are i64 as opposed to TIDs.
             format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 RETURNING {columns}"#, columns = FileDeletionsDb::COLUMNS),
             params!(qualified_table_name.escaped_string()),
           )
@@ -191,7 +193,9 @@ pub(crate) async fn delete_pending_files_impl(
   let mut errors: Vec<FileDeletionsDb> = vec![];
   let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
     let result = store
-      .delete(&object_store::path::Path::from(file.objectstore_id()))
+      .delete(&object_store::path::Path::from(
+        file.objectstore_id().to_string(),
+      ))
       .await;
 
     match result {
@@ -231,7 +235,7 @@ pub(crate) async fn delete_pending_files_impl(
       if let Some(updated) =
         updated_json.and_then(|json| serde_json::from_str::<FileUploads>(json).ok())
       {
-        let required: HashSet<&str> = updated.0.iter().map(|f| f.objectstore_id()).collect();
+        let required: HashSet<&uuid::Uuid> = updated.0.iter().map(|f| f.objectstore_id()).collect();
         for file in files.0 {
           // Only delete if the objectstore id isn't still referenced by the updated
           // entry.
@@ -331,7 +335,7 @@ impl Drop for FileManager {
 
       tokio::spawn(async move {
         for file in written_files {
-          let path = object_store::path::Path::from(file.objectstore_id());
+          let path = object_store::path::Path::from(file.objectstore_id().to_string());
           if let Err(err) = store.delete(&path).await {
             warn!("Failed to cleanup just written file: {err}");
           }
@@ -415,7 +419,7 @@ fn write_contents(
   let store = store.clone();
   return Some(Box::pin(async move {
     let id = metadata.objectstore_id();
-    let path = object_store::path::Path::from(id);
+    let path = object_store::path::Path::from(id.to_string());
 
     let err = |err: object_store::Error| -> FileWriteError {
       return (path.to_string(), err);
