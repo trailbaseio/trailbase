@@ -28,6 +28,8 @@ pub enum ParamsError {
   JsonSerialization(#[from] serde_json::Error),
   #[error("JsonSchema: {0}")]
   JsonSchema(#[from] trailbase_schema::json_schema::Error),
+  #[error("FileMetadataSanitizer: {0}")]
+  FileMetadataSanitizer(Box<dyn std::error::Error + Sync + Send>),
   #[error("ObjectStore: {0}")]
   Storage(#[from] object_store::Error),
   #[error("SqlValueDecode: {0}")]
@@ -52,6 +54,9 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
       trailbase_schema::json::JsonError::ParseInt(err) => Self::ParseInt(err),
       trailbase_schema::json::JsonError::ParseFloat(err) => Self::ParseFloat(err),
       trailbase_schema::json::JsonError::Serde(err) => Self::JsonSerialization(err),
+      trailbase_schema::json::JsonError::FileMetadataSanitizer(err) => {
+        Self::FileMetadataSanitizer(err)
+      }
       #[cfg(any(feature = "geos", feature = "geos-static"))]
       trailbase_schema::json::JsonError::Geos(err) => Self::Geos(err),
     };

@@ -189,6 +189,7 @@ mod tests {
             &[],
             &row,
             None,
+            /* file_metadata_sanitizer= */ None,
           )
           .unwrap();
 

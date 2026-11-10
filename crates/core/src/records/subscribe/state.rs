@@ -453,7 +453,13 @@ fn broker(state: &mut PerConnectionStateInternal, event: CommittedEvent) {
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
       .collect();
 
-    match record_to_json_expand(&table_metadata.column_metadata, &[], &record, None) {
+    match record_to_json_expand(
+      &table_metadata.column_metadata,
+      &[],
+      &record,
+      None,
+      /* file_metadata_sanitizer= */ None,
+    ) {
       Ok(json_obj) => Arc::new(match action {
         RecordAction::Insert => EventPayload::insert(json_obj, record),
         RecordAction::Update => EventPayload::update(json_obj, record),

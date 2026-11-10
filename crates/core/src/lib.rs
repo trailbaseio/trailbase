@@ -15,12 +15,12 @@ pub mod util;
 pub mod test_util;
 
 mod admin;
+mod aes;
 mod auth;
 mod backup;
 mod connection;
 mod data_dir;
 mod email;
-mod encryption;
 mod extract;
 mod init_error;
 mod listing;

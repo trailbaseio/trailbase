@@ -92,7 +92,8 @@ pub struct FileUpload {
   /// the two use-cases into different representations.
   #[schemars(skip)]
   #[serde(default = "Uuid::default")]
-  id: Uuid,
+  #[serde(skip_serializing_if = "Uuid::is_nil")]
+  pub(crate) id: Uuid,
 
   /// The file's original file name.
   #[serde(skip_serializing_if = "Option::is_none")]

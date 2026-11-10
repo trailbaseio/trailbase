@@ -4,6 +4,7 @@ use trailbase_sqlite::Value as SqliteValue;
 use crate::db::metadata::{ColumnMetadata, JsonColumnMetadata};
 use crate::json::error::JsonError;
 use crate::json::value::{JsonObject, Value};
+use crate::json_schema::FileUpload;
 
 #[allow(clippy::len_without_is_empty)]
 pub trait Record {
@@ -37,15 +38,28 @@ impl Record for Vec<(String, trailbase_sqlite::Value)> {
   }
 }
 
+pub type FileMetadataSanitizer<'a> = dyn Fn(
+    /* column_name= */ &str,
+    FileUpload,
+  ) -> Result<Value<'static>, Box<dyn std::error::Error + Sync + Send>>
+  + 'static;
+
 /// Serialize SQL row to json. Skips columns prefixed with "_" and can expand foreign key columns.
-pub fn record_to_json_expand(
-  column_metadata: &[ColumnMetadata],
-  expand_config: &[compact_str::CompactString],
-  record: &impl Record,
+pub fn record_to_json_expand<'a>(
+  column_metadata: &'a [ColumnMetadata],
+  expand_config: &'a [compact_str::CompactString],
+  record: &'a impl Record,
   expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
+  file_metadata_sanitizer: Option<&FileMetadataSanitizer>,
 ) -> Result<Box<serde_json::value::RawValue>, JsonError> {
   return Ok(serde_json::value::to_raw_value(&Value::Object(
-    record_to_json_expand_ref(column_metadata, expand_config, record, expand)?,
+    record_to_json_expand_ref(
+      column_metadata,
+      expand_config,
+      record,
+      expand,
+      file_metadata_sanitizer,
+    )?,
   ))?);
 }
 
@@ -54,6 +68,7 @@ pub fn record_to_json_expand_ref<'a>(
   expand_config: &'a [compact_str::CompactString],
   record: &'a impl Record,
   mut expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
+  file_metadata_sanitizer: Option<&FileMetadataSanitizer>,
 ) -> Result<Vec<(&'a str, Value<'a>)>, JsonError> {
   // Record may contain extra columns like trailing "_rowid_" or filtered columns starting with "_".
   if column_metadata.len() > record.len() {
@@ -70,28 +85,30 @@ pub fn record_to_json_expand_ref<'a>(
       };
 
       let column = &meta.column;
-      if column.name.as_str() != name {
+      let column_name = column.name.as_str();
+
+      if column_name != name {
         return Err(JsonError::ColumnMismatch);
       }
 
       // QUESTION: Should this go behind FK expansion? I.e. should the output be `{ fk: null }` or
       // `{ fk: {id: null} }`?
       if matches!(value, trailbase_sqlite::Value::Null) {
-        return Ok((column.name.as_str(), Value::Null));
+        return Ok((column_name, Value::Null));
       }
 
       // Expand a foreign key.
-      if meta.is_fk && expand_config.iter().any(|c| *c == column.name) {
+      if meta.is_fk && expand_config.iter().any(|c| *c == column_name) {
         let id = value_ref_to_flat_json_owned(value)?;
         let Some(expand) = expand.as_mut() else {
-          return Ok((column.name.as_str(), Value::ForeignKey { id, data: None }));
+          return Ok((column_name, Value::ForeignKey { id, data: None }));
         };
 
         return Ok((
-          column.name.as_str(),
+          column_name,
           Value::ForeignKey {
             id,
-            data: pop_first_matching(expand, |(c, _)| *c == column.name).map(|(_, v)| v),
+            data: pop_first_matching(expand, |(c, _)| *c == column_name).map(|(_, v)| v),
           },
         ));
       }
@@ -102,28 +119,40 @@ pub fn record_to_json_expand_ref<'a>(
       {
         return match json {
           JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
-            let file_metadata: JsonObject = serde_json::from_str(str)?;
-
-            Ok((
-              column.name.as_str(),
-              Value::ObjectOwned(strip_file_metadata_id(file_metadata)),
-            ))
+            match file_metadata_sanitizer {
+              Some(ref sanitizer) => Ok((
+                column_name,
+                sanitizer(column_name, serde_json::from_str(str)?)
+                  .map_err(JsonError::FileMetadataSanitizer)?,
+              )),
+              None => {
+                let mut file_metadata: JsonObject = serde_json::from_str(str)?;
+                strip_file_metadata_id(&mut file_metadata);
+                Ok((column_name, Value::ObjectOwned(file_metadata)))
+              }
+            }
           }
           JsonColumnMetadata::SchemaName(x) if x == "std.FileUploads" => {
-            let file_metadata_list: Vec<JsonObject> = serde_json::from_str(str)?;
+            let file_metadata_list: Vec<_> = match file_metadata_sanitizer {
+              Some(ref sanitizer) => serde_json::from_str::<Vec<FileUpload>>(str)?
+                .into_iter()
+                .map(|file_metadata| -> Result<_, JsonError> {
+                  sanitizer(column_name, file_metadata).map_err(JsonError::FileMetadataSanitizer)
+                })
+                .collect::<Result<_, _>>()?,
+              None => serde_json::from_str::<Vec<JsonObject>>(str)?
+                .into_iter()
+                .map(|mut file_metadata| {
+                  strip_file_metadata_id(&mut file_metadata);
+                  Value::ObjectOwned(file_metadata)
+                })
+                .collect(),
+            };
 
-            Ok((
-              column.name.as_str(),
-              Value::Array(
-                file_metadata_list
-                  .into_iter()
-                  .map(|obj| Value::ObjectOwned(strip_file_metadata_id(obj)))
-                  .collect(),
-              ),
-            ))
+            Ok((column_name, Value::Array(file_metadata_list)))
           }
           JsonColumnMetadata::SchemaName(_) | JsonColumnMetadata::Pattern(_) => Ok((
-            column.name.as_str(),
+            column_name,
             Value::Raw(serde_json::value::RawValue::from_string(str.clone())?),
           )),
         };
@@ -141,13 +170,13 @@ pub fn record_to_json_expand_ref<'a>(
               panic!("should not happen");
             }
           };
-          return Ok((column.name.as_str(), obj));
+          return Ok((column_name, obj));
         }
 
         debug_assert!(false, "expected blob");
       }
 
-      return Ok((column.name.as_str(), value_to_flat_json_borrow(value)?));
+      return Ok((column_name, value_to_flat_json_borrow(value)?));
     })
     .collect::<Result<_, JsonError>>();
 }
@@ -254,9 +283,8 @@ fn value_to_flat_json_borrow<'a>(value: &'a SqliteValue) -> Result<Value<'a>, Js
 }
 
 #[inline]
-fn strip_file_metadata_id(mut _file_metadata: JsonObject) -> JsonObject {
-  _file_metadata.remove("id");
-  return _file_metadata;
+fn strip_file_metadata_id(file_metadata: &mut JsonObject) {
+  file_metadata.remove("id");
 }
 
 #[inline]
@@ -294,7 +322,7 @@ mod tests {
     assert_eq!(
       serde_json::json!({"a": 5}),
       serde_json::from_str::<serde_json::Value>(
-        &record_to_json_expand(&column_metatada, &[], &record0, None)
+        &record_to_json_expand(&column_metatada, &[], &record0, None, None)
           .unwrap()
           .to_string()
       )

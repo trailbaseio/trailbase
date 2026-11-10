@@ -20,6 +20,8 @@ pub enum JsonError {
   ParseFloat(#[from] std::num::ParseFloatError),
   #[error("Serde: {0}")]
   Serde(#[from] serde_json::Error),
+  #[error("FileMetadataSanitizer: {0}")]
+  FileMetadataSanitizer(Box<dyn std::error::Error + Sync + Send>),
   #[cfg(feature = "geos")]
   #[error("Geos: {0}")]
   Geos(#[from] geos::Error),

@@ -88,9 +88,14 @@ pub async fn read_record_handler(
     for expanded in &expanded_tables {
       let next = curr.split_off(expanded.num_columns);
 
-      let foreign_value =
-        record_to_json_expand(&expanded.metadata.column_metadata, &[], &curr, None)
-          .map_err(|err| RecordError::Internal(err.into()))?;
+      let foreign_value = record_to_json_expand(
+        &expanded.metadata.column_metadata,
+        &[],
+        &curr,
+        None,
+        /* file_metadata_sanitizer= */ None,
+      )
+      .map_err(|err| RecordError::Internal(err.into()))?;
 
       expand.push((
         expanded.local_column_name.to_compact_string(),
@@ -100,11 +105,23 @@ pub async fn read_record_handler(
       curr = next;
     }
 
-    record_to_json_expand_ref(api.columns(), config_expand, &row, Some(expand))
-      .map_err(|err| RecordError::Internal(err.into()))?
+    record_to_json_expand_ref(
+      api.columns(),
+      config_expand,
+      &row,
+      Some(expand),
+      /* file_metadata_sanitizer= */ None,
+    )
+    .map_err(|err| RecordError::Internal(err.into()))?
   } else {
-    record_to_json_expand_ref(api.columns(), config_expand, &row, None)
-      .map_err(|err| RecordError::Internal(err.into()))?
+    record_to_json_expand_ref(
+      api.columns(),
+      config_expand,
+      &row,
+      None,
+      /* file_metadata_sanitizer= */ None,
+    )
+    .map_err(|err| RecordError::Internal(err.into()))?
   };
 
   #[cfg(test)]
@@ -688,6 +705,15 @@ mod tests {
     .unwrap();
 
     let obj = to_object(&obj);
+
+    let file = obj.get("file").unwrap();
+    if let serde_json::Value::Object(obj) = file {
+      // Test that we strip out the internal objectstore id. Update this test, if we'd ever add an
+      // (maybe encrypted) id that can be safely round-tripped.
+      assert!(!obj.contains_key("id"));
+    } else {
+      panic!("not an obj");
+    }
 
     let file_upload: FileUpload = serde_json::from_value(obj.get("file").unwrap().clone()).unwrap();
     assert_eq!(

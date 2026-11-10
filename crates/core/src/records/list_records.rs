@@ -15,9 +15,9 @@ use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{JsonError, record_to_json_expand, record_to_json_expand_ref};
 use trailbase_sqlite::{ConnectionType, Value};
 
+use crate::aes::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{ExpandedTable, build_expand_tables_params};
 use crate::records::{Permission, RecordError};
@@ -344,9 +344,14 @@ pub async fn list_records_handler(
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
-          let foreign_value =
-            record_to_json_expand(&expanded.metadata.column_metadata, &[], &curr, None)
-              .map_err(|err| RecordError::Internal(err.into()))?;
+          let foreign_value = record_to_json_expand(
+            &expanded.metadata.column_metadata,
+            &[],
+            &curr,
+            None,
+            /* file_metadata_sanitizer= */ None,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
 
           expand.push((
             expanded.local_column_name.to_compact_string(),
@@ -356,14 +361,28 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        return record_to_json_expand_ref(api.columns(), config_expand, row, Some(expand))
-          .map_err(|err| RecordError::Internal(err.into()));
+        return record_to_json_expand_ref(
+          api.columns(),
+          config_expand,
+          row,
+          Some(expand),
+          /* file_metadata_sanitizer= */ None,
+        )
+        .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
   } else {
     rows
       .iter()
-      .map(|row| record_to_json_expand_ref(api.columns(), config_expand, row, None))
+      .map(|row| {
+        record_to_json_expand_ref(
+          api.columns(),
+          config_expand,
+          row,
+          None,
+          /* file_metadata_sanitizer= */ None,
+        )
+      })
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
   };
