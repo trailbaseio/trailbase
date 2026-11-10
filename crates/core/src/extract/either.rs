@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_schema::json_schema::FileUploadRequest;
 
 use crate::extract::content_type::{ContentTypeRejection, RequestContentType};
 use crate::extract::multipart::{Rejection as MultipartRejection, parse_multipart};
@@ -39,7 +39,7 @@ impl IntoResponse for EitherRejection {
 #[derive(Debug)]
 pub enum Either<T> {
   Json(T),
-  Multipart(T, Vec<FileUploadInput>),
+  Multipart(T, Vec<FileUploadRequest>),
   Form(T),
 }
 
@@ -61,7 +61,10 @@ where
       }
       Ok(RequestContentType::Multipart) => {
         let (value, files) = parse_multipart(req).await?;
-        Ok(Either::Multipart(value, files))
+        Ok(Either::Multipart(
+          value,
+          files.into_iter().map(FileUploadRequest::Data).collect(),
+        ))
       }
       Err(err) => match err {
         ContentTypeRejection::UnsupportedContentType(v) => {

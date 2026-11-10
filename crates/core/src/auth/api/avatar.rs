@@ -4,7 +4,7 @@ use const_format::formatcp;
 use std::sync::LazyLock;
 use trailbase_schema::db::metadata::{ColumnMetadata, TableMetadata};
 use trailbase_schema::db::sqlite::{Column, ColumnOption, QualifiedName, Table};
-use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_schema::json_schema::FileUploadRequest;
 
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
@@ -54,7 +54,7 @@ pub async fn get_avatar_handler(
   post,
   path = "/avatar",
   tag = "auth",
-  responses((status = 200, description = "Deletion success"))
+  responses((status = 200, description = "Uupload success"))
 )]
 pub async fn create_avatar_handler(
   State(state): State<AppState>,
@@ -74,15 +74,22 @@ pub async fn create_avatar_handler(
     assert_eq!(table_metadata.schema, AVATAR_TABLE_METADATA.schema);
   }
 
-  let files: Vec<FileUploadInput> = match either_request {
+  let files: Vec<FileUploadRequest> = match either_request {
     Either::Multipart(_value, files) => files,
     _ => {
       return Err(AuthError::BadRequest("expected multipart"));
     }
   };
 
-  if files.len() != 1 || files[0].name.as_deref() != Some("file") {
+  if files.len() != 1 {
     return Err(AuthError::BadRequest("Expected single 'file'"));
+  }
+
+  match &files[0] {
+    FileUploadRequest::Data(data) if data.name.as_deref() == Some("file") => {}
+    _ => {
+      return Err(AuthError::BadRequest("Expected single 'file'"));
+    }
   }
 
   let record = JsonRow::from_iter([(

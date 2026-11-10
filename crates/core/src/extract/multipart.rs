@@ -6,7 +6,7 @@ use axum::{
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use thiserror::Error;
-use trailbase_schema::json_schema::{FileUploadData, FileUploadInput};
+use trailbase_schema::json_schema::FileUploadData;
 
 #[derive(Debug, Error)]
 pub enum Rejection {
@@ -26,14 +26,14 @@ pub enum Rejection {
 ///
 /// Note, when encountering stream errors one should check the tower limit layers. The error is
 /// pretty cryptic when the stream gets cut off.
-pub async fn parse_multipart<T>(req: Request<Body>) -> Result<(T, Vec<FileUploadInput>), Rejection>
+pub async fn parse_multipart<T>(req: Request<Body>) -> Result<(T, Vec<FileUploadData>), Rejection>
 where
   T: DeserializeOwned + Send + Sync + 'static,
 {
   let mut multipart = axum::extract::Multipart::from_request(req, &()).await?;
 
   let mut data = serde_json::Map::<String, serde_json::Value>::new();
-  let mut files: Vec<FileUploadInput> = vec![];
+  let mut files: Vec<FileUploadData> = vec![];
 
   while let Some(mut field) = multipart.next_field().await? {
     if field.file_name().is_some() {
@@ -51,11 +51,11 @@ where
         continue;
       }
 
-      files.push(FileUploadInput {
+      files.push(FileUploadData {
         name,
         filename,
         content_type,
-        data: FileUploadData(buffer),
+        data: buffer,
       });
     } else if let Some(name) = field.name() {
       coerce_and_push_array(&mut data, name.to_string(), json!(field.text().await?));
@@ -145,17 +145,17 @@ mod tests {
     assert_eq!(
       files,
       vec![
-        (FileUploadInput {
+        (FileUploadData {
           name: Some("file1".to_string()),
           filename: Some("a.txt".to_string()),
           content_type: Some("text/plain".to_string()),
-          data: FileUploadData(Vec::from("Some text".as_bytes())),
+          data: Vec::from("Some text".as_bytes()),
         }),
-        (FileUploadInput {
+        (FileUploadData {
           name: Some("file2".to_string()),
           filename: Some("a.html".to_string()),
           content_type: Some("text/html".to_string()),
-          data: FileUploadData(Vec::from("<b>Some html</b>".as_bytes())),
+          data: Vec::from("<b>Some html</b>".as_bytes()),
         }),
       ]
     );

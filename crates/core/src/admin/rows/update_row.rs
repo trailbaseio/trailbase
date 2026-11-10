@@ -99,7 +99,7 @@ mod tests {
   use std::collections::HashMap;
 
   use axum::extract::RawQuery;
-  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadInput};
+  use trailbase_schema::json_schema::{FileUpload, FileUploadData};
 
   use super::*;
   use crate::admin::rows::list_rows::{ListRowsResponse, list_rows_handler};
@@ -136,11 +136,11 @@ mod tests {
     state.rebuild_connection_metadata().await.unwrap();
 
     let bytes0: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
-    let file0 = FileUploadInput {
+    let file0 = FileUploadData {
       name: Some("foo0".to_string()),
       filename: Some("bar0.png".to_string()),
       content_type: None,
-      data: FileUploadData(bytes0.clone()),
+      data: bytes0.clone(),
     };
 
     update_row_handler(
