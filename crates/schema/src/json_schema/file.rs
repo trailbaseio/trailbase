@@ -84,6 +84,28 @@ impl FileUploadInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FileUploadJson {
+  /// The file's text-encoded UUID from which the objectstore path is derived.
+  ///
+  /// TODO: We use this struct both for in-DB representation and JSON-schema/serialization. However,
+  /// we strip the the ID, this is why we have this schemars+serde weirdness here. We should split
+  /// the two use-cases into different representations.
+  pub token: Option<String>,
+
+  /// The file's original file name.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub original_filename: Option<String>,
+
+  /// A unique filename derived from `original_filename`. Helps to address content caching issues
+  /// with proxies, CDNs, ... .
+  pub filename: String,
+
+  /// The file's content-type as provided by a user.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub content_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
   ///
@@ -93,23 +115,23 @@ pub struct FileUpload {
   #[schemars(skip)]
   #[serde(default = "Uuid::default")]
   #[serde(skip_serializing_if = "Uuid::is_nil")]
-  pub(crate) id: Uuid,
+  pub id: Uuid,
 
   /// The file's original file name.
   #[serde(skip_serializing_if = "Option::is_none")]
-  original_filename: Option<String>,
+  pub original_filename: Option<String>,
 
   /// A unique filename derived from `original_filename`. Helps to address content caching issues
   /// with proxies, CDNs, ... .
-  filename: String,
+  pub filename: String,
 
   /// The file's content-type as provided by a user.
   #[serde(skip_serializing_if = "Option::is_none")]
-  content_type: Option<String>,
+  pub content_type: Option<String>,
 
   /// The file's inferred mime type. Not user provided.
   #[serde(skip_serializing_if = "Option::is_none")]
-  mime_type: Option<String>,
+  pub mime_type: Option<String>,
 }
 
 impl FileUpload {

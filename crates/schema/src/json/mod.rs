@@ -9,7 +9,10 @@ use trailbase_sqlite::Value as SqliteValue;
 use crate::db::sqlite::ColumnDataType;
 
 pub use error::JsonError;
-pub use record::{Record, record_to_json_expand, record_to_json_expand_ref};
+pub use record::{
+  FileMetadataSanitizer, Record, record_to_json_expand, record_to_json_expand_ref,
+  value_ref_to_flat_json_owned,
+};
 pub use value::{JsonObject, Value};
 
 #[cfg(feature = "geos")]

@@ -255,7 +255,7 @@ pub fn build_feature_collection(
 
 /// Convert a SQLite value to basic JSON types: String, Number, Null.
 #[inline]
-fn value_ref_to_flat_json_owned(value: &SqliteValue) -> Result<serde_json::Value, JsonError> {
+pub fn value_ref_to_flat_json_owned(value: &SqliteValue) -> Result<serde_json::Value, JsonError> {
   return match value {
     SqliteValue::Null => Ok(serde_json::Value::Null),
     SqliteValue::Real(f) => Ok(serde_json::Value::Number(

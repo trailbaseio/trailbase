@@ -17,7 +17,7 @@ use crate::db::metadata::{
 use crate::db::sqlite::{ColumnDataType, ColumnOption};
 
 pub use error::Error;
-pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};
+pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploadJson, FileUploads};
 
 /// Influences the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
