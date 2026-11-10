@@ -66,7 +66,7 @@ pub async fn read_record_handler(
     })
     .transpose()?;
 
-  let query = ReadRecordApiQuery::new(api.clone(), record_id, expanded_tables.as_deref())?;
+  let query = ReadRecordApiQuery::new(api.clone(), record_id.clone(), expanded_tables.as_deref())?;
   query.check_table_level_access(user.as_ref())?;
 
   let mut row = api
@@ -78,6 +78,27 @@ pub async fn read_record_handler(
       }
     })
     .await?;
+
+  let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
+    if api.has_file_columns() {
+      let table_name = api.table_name().clone();
+      let record_id = record_id.clone();
+
+      Some(&move |column_name: &str, metadata: FileUpload| {
+        // FIXME: wire up a stable, dedicated key.
+        let key = crate::aes::generate_random_key();
+
+        return crate::records::file_id::file_metadata_sanitizer(
+          &key,
+          &table_name.to_string(),
+          column_name,
+          &record_id,
+          metadata,
+        );
+      })
+    } else {
+      None
+    };
 
   let json_obj = if let Some(expanded_tables) = expanded_tables
     && !expanded_tables.is_empty()
@@ -93,7 +114,7 @@ pub async fn read_record_handler(
         &[],
         &curr,
         None,
-        /* file_metadata_sanitizer= */ None,
+        file_metadata_sanitizer,
       )
       .map_err(|err| RecordError::Internal(err.into()))?;
 
@@ -110,7 +131,7 @@ pub async fn read_record_handler(
       config_expand,
       &row,
       Some(expand),
-      /* file_metadata_sanitizer= */ None,
+      file_metadata_sanitizer,
     )
     .map_err(|err| RecordError::Internal(err.into()))?
   } else {
@@ -119,7 +140,7 @@ pub async fn read_record_handler(
       config_expand,
       &row,
       None,
-      /* file_metadata_sanitizer= */ None,
+      file_metadata_sanitizer,
     )
     .map_err(|err| RecordError::Internal(err.into()))?
   };
