@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_schema::json_schema::FileUploadRequest;
 use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
 
@@ -47,7 +47,7 @@ pub(crate) fn extract_record(value: serde_json::Value) -> Result<JsonRow, Record
   });
 }
 
-pub(crate) type RecordAndFiles = (JsonRow, Option<Vec<FileUploadInput>>);
+pub(crate) type RecordAndFiles = (JsonRow, Option<Vec<FileUploadRequest>>);
 
 #[inline]
 fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, RecordError> {
@@ -244,7 +244,7 @@ pub(crate) fn build_insert_params(
   api: &RecordApi,
   user: Option<&User>,
   mut record: JsonRow,
-  files: Option<Vec<FileUploadInput>>,
+  files: Option<Vec<FileUploadRequest>>,
 ) -> Result<(InsertParams, FileMetadataContents), ParamsError> {
   // Optionally insert user.
   if api.insert_autofill_missing_user_id_columns()

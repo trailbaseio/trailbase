@@ -17,7 +17,7 @@ use crate::db::metadata::{
 use crate::db::sqlite::{ColumnDataType, ColumnOption};
 
 pub use error::Error;
-pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploadJson, FileUploads};
+pub use file::{FileUpload, FileUploadData, FileUploadRequest, FileUploadResponse};
 
 /// Influences the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
@@ -269,6 +269,17 @@ fn build_json_schema_expanded_impl(
       // The way we represent NULL DB values in the output json is that they're still present
       // but explicitly null (as opposed to absent).
       if nullable && let Some(obj) = def.as_object_mut() {
+        match obj.entry("anyOf") {
+          Entry::Occupied(mut e) => {
+            if let Value::Array(types) = e.get() {
+              let mut new_types = vec![serde_json::json!({ "type": "null" })];
+              new_types.extend_from_slice(types);
+              e.insert(serde_json::json!(new_types));
+            }
+          }
+          Entry::Vacant(_e) => {}
+        }
+
         match obj.entry("type") {
           Entry::Occupied(mut e) => match e.get() {
             Value::Array(types) => {

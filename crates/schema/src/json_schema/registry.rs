@@ -4,7 +4,7 @@ use std::sync::Arc;
 pub use trailbase_extension::jsonschema::{JsonSchemaRegistry, Schema};
 
 use crate::json_schema::error::Error;
-use crate::json_schema::file::{FileUpload, FileUploads};
+use crate::json_schema::file::{FileUploadRequest, FileUploadResponse};
 
 #[derive(Debug, Default, Clone, PartialEq, JsonSchema)]
 struct KeyValue(std::collections::BTreeMap<String, String>);
@@ -43,11 +43,19 @@ fn builtin_schemas() -> Vec<(String, Schema)> {
     return false;
   }
 
+  #[derive(JsonSchema)]
+  #[serde(untagged)]
+  #[allow(unused)]
+  enum FileUploadRequestOrResponse {
+    Request(FileUploadRequest),
+    Response(FileUploadResponse),
+  }
+
   return vec![
     (
       "std.FileUpload".to_string(),
       Schema::from(
-        schema_for!(FileUpload).to_value(),
+        schema_for!(FileUploadRequestOrResponse).to_value(),
         Some(Arc::new(validate_mime_type)),
         true,
       )
@@ -55,7 +63,12 @@ fn builtin_schemas() -> Vec<(String, Schema)> {
     ),
     (
       "std.FileUploads".to_string(),
-      Schema::from(schema_for!(FileUploads).to_value(), None, true).expect("infallible"),
+      Schema::from(
+        schema_for!(Vec<FileUploadRequestOrResponse>).to_value(),
+        None,
+        true,
+      )
+      .expect("infallible"),
     ),
     (
       "std.KeyValue".to_string(),
@@ -96,12 +109,12 @@ mod tests {
             {
               "id": uuid::Uuid::new_v4().to_string(),
               "filename": "foo0_8435o3.png",
-              "mime_type": "my_foo0",
+              "mime-type": "my_foo0",
             },
             {
               "id": uuid::Uuid::new_v4().to_string(),
               "filename": "foo1_xex5o3.png",
-              "mime_type": "my_foo1",
+              "mime-type": "my_foo1",
             },
           ]))
           .is_ok()

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_schema::json_schema::{FileUpload, FileUploads};
+use trailbase_schema::json_schema::FileUpload;
 use trailbase_sqlite::{ConnectionType, params};
 
 use crate::app_state::AppState;
@@ -231,12 +231,12 @@ pub(crate) async fn delete_pending_files_impl(
       } else {
         delete(&pending_deletion, file).await;
       }
-    } else if let Ok(files) = serde_json::from_str::<FileUploads>(json) {
+    } else if let Ok(files) = serde_json::from_str::<Vec<FileUpload>>(json) {
       if let Some(updated) =
-        updated_json.and_then(|json| serde_json::from_str::<FileUploads>(json).ok())
+        updated_json.and_then(|json| serde_json::from_str::<Vec<FileUpload>>(json).ok())
       {
-        let required: HashSet<&uuid::Uuid> = updated.0.iter().map(|f| f.objectstore_id()).collect();
-        for file in files.0 {
+        let required: HashSet<&uuid::Uuid> = updated.iter().map(|f| f.objectstore_id()).collect();
+        for file in files {
           // Only delete if the objectstore id isn't still referenced by the updated
           // entry.
           if !required.contains(file.objectstore_id()) {
@@ -244,7 +244,7 @@ pub(crate) async fn delete_pending_files_impl(
           }
         }
       } else {
-        for file in files.0 {
+        for file in files {
           delete(&pending_deletion, file).await;
         }
       }

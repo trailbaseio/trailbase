@@ -1,70 +1,66 @@
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::json_schema::error::Error;
 
+/// Wire representation of upload requests, which may either contain data or use a token to
+/// represent round-tripped data for update operations.
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+#[cfg_attr(debug_assertions, derive(Serialize))]
+#[serde(untagged)]
+#[schemars(description = "")]
+pub enum FileUploadRequest {
+  /// Input data: metadata + bytes.
+  #[schemars(description = "")]
+  Data(FileUploadData),
+  /// Encoded token representation.
+  #[schemars(description = "")]
+  Token { token: String },
+}
+
+impl FileUploadRequest {
+  /// Returns (name, json, bytes).
+  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), Error> {
+    return match self {
+      FileUploadRequest::Data(data) => data.consume(),
+      FileUploadRequest::Token { token: _ } => Err(Error::NotImplemented),
+    };
+  }
+}
+
 /// File input schema used both for multipart-form uploads (in which case the name is mapped to
 /// column names) and JSON where the column name is extracted from the corresponding key of the
 /// parent object.
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct FileUploadInput {
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+#[cfg_attr(debug_assertions, derive(Serialize))]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+#[schemars(description = "")]
+pub struct FileUploadData {
   /// The name of the form's file control.
+  #[schemars(description = "")]
   pub name: Option<String>,
 
   /// The file's original file name.
+  #[schemars(description = "")]
   pub filename: Option<String>,
 
-  /// The file's content type.
+  /// Optional, user-provided content-type.
+  #[schemars(description = "")]
   pub content_type: Option<String>,
 
   /// The file's actual byte data
   ///
   /// Note that we're using a custom serializer to support denser base64 encoding for JSON when
   /// Vec<u8>, would otherwise be serialized as `"data": [0, 1, 1]`.
-  pub data: FileUploadData,
+  #[schemars(description = "", schema_with = "string_or_byte_array_schema")]
+  #[serde(with = "bytes_or_base64")]
+  pub data: Vec<u8>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct FileUploadData(#[serde(with = "bytes_or_base64")] pub Vec<u8>);
-
-mod bytes_or_base64 {
-  use base64::prelude::*;
-  use serde::{Deserialize, Serialize};
-  use serde::{Deserializer, Serializer};
-
-  // NOTE: FileUpload*Input* is serializable, this should only be used by tests, however we have no
-  // means to only implement for test across crate boundaries.
-  pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
-    return if s.is_human_readable() {
-      String::serialize(&BASE64_URL_SAFE.encode(v), s)
-    } else {
-      Vec::<u8>::serialize(v, s)
-    };
-  }
-
-  pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-    if !d.is_human_readable() {
-      return Vec::<u8>::deserialize(d);
-    }
-
-    // QUESTION: Should we fall back to Vec::<u8>::deserialize on failure? Probably not.
-    let str = String::deserialize(d)?;
-    return BASE64_URL_SAFE
-      .decode(&str)
-      .or_else(|_| BASE64_STANDARD.decode(&str))
-      .map_err(serde::de::Error::custom);
-  }
-}
-
-impl FileUploadInput {
+impl FileUploadData {
   /// Returns (name, json, bytes).
-  ///
-  /// Note that the FileUploadInput may not contain `data`, e.g. if we're just round-tripping the
-  /// json stored in the DB. This is useful for updates and deletions, where we're manipulating
-  /// just retrieved file vectors.
-  pub fn consume(self) -> Result<(Option<String>, FileUpload, FileUploadData), Error> {
+  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), Error> {
     let Self {
       name,
       filename,
@@ -73,7 +69,7 @@ impl FileUploadInput {
     } = self;
 
     // We don't trust user provided type, we check ourselves.
-    let mime_type = infer::get(&data.0).map(|t| t.mime_type().to_string());
+    let mime_type = infer::get(&data).map(|t| t.mime_type().to_string());
 
     return Ok((
       name,
@@ -83,38 +79,36 @@ impl FileUploadInput {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct FileUploadJson {
-  /// The file's text-encoded UUID from which the objectstore path is derived.
-  ///
-  /// TODO: We use this struct both for in-DB representation and JSON-schema/serialization. However,
-  /// we strip the the ID, this is why we have this schemars+serde weirdness here. We should split
-  /// the two use-cases into different representations.
+/// Wire-representation of FileUpload responses, e.g. read_file.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(debug_assertions, derive(Deserialize))]
+#[schemars(description = "")]
+pub struct FileUploadResponse {
+  /// An opaque token to reference this file in update-operations.
+  #[schemars(description = "")]
   pub token: Option<String>,
 
   /// The file's original file name.
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[schemars(description = "")]
   pub original_filename: Option<String>,
 
   /// A unique filename derived from `original_filename`. Helps to address content caching issues
   /// with proxies, CDNs, ... .
+  #[schemars(description = "")]
   pub filename: String,
 
   /// The file's content-type as provided by a user.
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[schemars(description = "")]
   pub content_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+/// DB at-rest representation of FileUploads.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
-  ///
-  /// TODO: We use this struct both for in-DB representation and JSON-schema/serialization. However,
-  /// we strip the the ID, this is why we have this schemars+serde weirdness here. We should split
   /// the two use-cases into different representations.
-  #[schemars(skip)]
-  #[serde(default = "Uuid::default")]
-  #[serde(skip_serializing_if = "Uuid::is_nil")]
   pub id: Uuid,
 
   /// The file's original file name.
@@ -168,9 +162,6 @@ impl FileUpload {
   }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct FileUploads(pub Vec<FileUpload>);
-
 fn generate_random_lower_case_alphanumeric(length: usize) -> String {
   use rand::Rng;
 
@@ -207,12 +198,65 @@ fn build_unique_filename(original_filename: Option<&str>) -> String {
   };
 }
 
+fn string_or_byte_array_schema(g: &mut SchemaGenerator) -> Schema {
+  // Construct a schema containing both possibilities
+  schemars::json_schema!({
+    "anyOf": [
+      schemars::json_schema!({
+        "type": "string",
+        "contentEncoding": "base64"
+      }),
+      g.subschema_for::<Vec<u8>>()
+    ],
+  })
+}
+
+mod bytes_or_base64 {
+  use base64::prelude::*;
+
+  #[allow(unused)]
+  pub fn serialize<S: serde::Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
+    use serde::Serialize;
+
+    return if s.is_human_readable() {
+      String::serialize(&BASE64_URL_SAFE.encode(v), s)
+    } else {
+      Vec::<u8>::serialize(v, s)
+    };
+  }
+
+  pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+    use serde::Deserialize;
+
+    if !d.is_human_readable() {
+      return Vec::<u8>::deserialize(d);
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+      Bytes(Vec<u8>),
+      Text(String),
+    }
+
+    return match Raw::deserialize(d)? {
+      Raw::Bytes(b) => Ok(b),
+      Raw::Text(s) => BASE64_URL_SAFE
+        .decode(&s)
+        .or_else(|_| BASE64_STANDARD.decode(&s))
+        .map_err(|e| serde::de::Error::custom(format!("invalid base64: {e}"))),
+    };
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use base64::{Engine, prelude::BASE64_URL_SAFE};
+  use base64::prelude::*;
+  use serde::de::DeserializeOwned;
+  use serde_json::json;
+  use std::path::PathBuf;
 
   use super::*;
-  use std::path::PathBuf;
 
   #[test]
   fn test_build_unique_filename() {
@@ -247,12 +291,32 @@ mod tests {
   #[test]
   fn test_file_upload_input_serialization() {
     // Missing data.
-    assert!(serde_json::from_str::<FileUploadInput>("{}").is_err());
+    assert!(serde_json::from_str::<FileUploadRequest>("{}").is_err());
 
-    let data = BASE64_URL_SAFE.encode([0, 1]);
-    serde_json::from_str::<FileUploadInput>(&format!("{{ \"data\": \"{data}\" }}")).unwrap();
+    fn deserialize_and_check_schema<T: JsonSchema + DeserializeOwned>(value: serde_json::Value) {
+      let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
+      jsonschema::validate(&schema, &value).unwrap();
+      serde_json::from_value::<T>(value).unwrap();
+    }
 
-    // NOTE: Currently we don't support arrays, see "QUESTION" above. Maybe we should :shrug:.
-    assert!(serde_json::from_str::<FileUploadInput>("{ \"data\": [0, 1] }").is_err());
+    let data = [0, 1];
+
+    deserialize_and_check_schema::<FileUploadRequest>(json!({
+        "data": &data,
+    }));
+
+    deserialize_and_check_schema::<FileUploadRequest>(json!({
+        "data": BASE64_URL_SAFE.encode(&data),
+    }));
+
+    deserialize_and_check_schema::<FileUploadRequest>(json!({
+        "name": "test",
+        "content_type": "text",
+        "data": &BASE64_STANDARD.encode(&data),
+    }));
+
+    deserialize_and_check_schema::<FileUploadRequest>(json!({
+        "token": "opaque",
+    }));
   }
 }

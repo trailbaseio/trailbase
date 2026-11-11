@@ -2,7 +2,7 @@ use object_store::ObjectStore;
 use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
-use trailbase_schema::json_schema::{FileUpload, FileUploads};
+use trailbase_schema::json_schema::FileUpload;
 use trailbase_sqlite::{Connection, Value};
 
 use crate::config::proto;
@@ -163,7 +163,7 @@ pub(crate) async fn run_get_files_query(
   file_column_meta: &ColumnMetadata,
   pk_column: &str,
   pk_value: Value,
-) -> Result<FileUploads, RecordError> {
+) -> Result<Vec<FileUpload>, RecordError> {
   let Some(JsonColumnMetadata::SchemaName(name)) = &file_column_meta.json else {
     return Err(RecordError::BadRequest("not a file column"));
   };
@@ -184,9 +184,9 @@ pub(crate) async fn run_get_files_query(
 
       serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))
     }
-    "std.FileUpload" => Ok(FileUploads(vec![
+    "std.FileUpload" => Ok(vec![
       run_get_file_query(conn, table_name, file_column_meta, pk_column, pk_value).await?,
-    ])),
+    ]),
     _ => Err(RecordError::BadRequest("column mismatch")),
   };
 }
