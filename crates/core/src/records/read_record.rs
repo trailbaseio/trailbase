@@ -3,7 +3,7 @@ use axum::response::Response;
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
-use trailbase_schema::json_schema::{FileUpload, FileUploads};
+use trailbase_schema::json_schema::FileUpload;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
@@ -249,7 +249,7 @@ pub async fn get_uploaded_files_from_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
 
-  let FileUploads(file_uploads) = match name.as_str() {
+  let file_uploads: Vec<FileUpload> = match name.as_str() {
     "std.FileUploads" => {
       let query =
         ReadFileRecordApiQuery::new_file_uploads(api.clone(), column_metadata, record_id)?;
@@ -278,9 +278,7 @@ pub async fn get_uploaded_files_from_record_handler(
         })
         .await?;
 
-      FileUploads(vec![
-        serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?,
-      ])
+      vec![serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?]
     }
     _ => {
       return Err(RecordError::BadRequest("column mismatch"));
@@ -327,7 +325,7 @@ mod tests {
   use std::io::Read;
   use std::sync::Arc;
   use trailbase_schema::QualifiedName;
-  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadInput};
+  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadResponse};
   use trailbase_sqlite::ConnectionType;
 
   use super::*;
@@ -697,11 +695,11 @@ mod tests {
         None,
         Either::Json(
           json_row_from_value(json!({
-            file_column: FileUploadInput {
+            file_column: FileUploadData {
               name: Some("name".to_string()),
               filename: Some("bar".to_string()),
               content_type: Some("baz".to_string()),
-              data: FileUploadData(bytes.clone()),
+              data: bytes.clone(),
             },
           }))
           .unwrap()
@@ -736,13 +734,14 @@ mod tests {
       panic!("not an obj");
     }
 
-    let file_upload: FileUpload = serde_json::from_value(obj.get("file").unwrap().clone()).unwrap();
+    let file_upload: FileUploadResponse =
+      serde_json::from_value(obj.get("file").unwrap().clone()).unwrap();
     assert_eq!(
-      file_upload.original_filename(),
       Some("bar"),
+      file_upload.original_filename.as_deref(),
       "{file_upload:?}"
     );
-    assert_eq!(file_upload.content_type(), Some("baz"));
+    assert_eq!(Some("baz"), file_upload.content_type.as_deref());
 
     let record_file_path = Path((
       API_NAME.to_string(),
@@ -817,24 +816,24 @@ mod tests {
     let bytes2: Vec<u8> = vec![42, 5, 42, 5];
 
     let request = json!({
-      "file" : FileUploadInput {
+      "file" : FileUploadData {
         name: Some("foo0".to_string()),
         filename: Some("bar0".to_string()),
         content_type: Some("baz0".to_string()),
-        data: FileUploadData(bytes0.clone()),
+        data: bytes0.clone(),
       },
       "files": vec![
-          FileUploadInput {
+          FileUploadData {
             name: Some("foo1".to_string()),
             filename: Some("bar1".to_string()),
             content_type: Some("baz1".to_string()),
-            data: FileUploadData(bytes1.clone()),
+            data: bytes1.clone(),
           },
-          FileUploadInput {
+          FileUploadData {
             name: Some("foo2".to_string()),
             filename: Some("bar2".to_string()),
             content_type: Some("baz2".to_string()),
-            data: FileUploadData(bytes2.clone()),
+            data: bytes2.clone(),
           },
       ],
     });

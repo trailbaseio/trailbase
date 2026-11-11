@@ -1,7 +1,7 @@
 use base64::prelude::*;
 use jsonwebtoken::jwk::{AlgorithmParameters, Jwk, OctetKeyParameters, OctetKeyType};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::json_schema::{FileUpload, FileUploadJson};
+use trailbase_schema::json_schema::{FileUpload, FileUploadResponse};
 
 use crate::aes::{KeyType, encrypt, generate_random_key};
 use crate::data_dir::DataDir;
@@ -70,9 +70,8 @@ fn file_metadata_sanitizer_impl(
   column_name: &str,
   pk: &trailbase_sqlite::Value,
   metadata: FileUpload,
-) -> Result<trailbase_schema::json_schema::FileUploadJson, Box<dyn std::error::Error + Sync + Send>>
-{
-  return Ok(FileUploadJson {
+) -> Result<FileUploadResponse, Box<dyn std::error::Error + Sync + Send>> {
+  return Ok(FileUploadResponse {
     content_type: metadata.mime_type.clone().or(metadata.content_type.clone()),
     original_filename: metadata.original_filename.clone(),
     filename: metadata.filename.clone(),

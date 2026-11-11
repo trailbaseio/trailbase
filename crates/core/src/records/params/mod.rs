@@ -6,7 +6,7 @@ use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
-use trailbase_schema::json_schema::{FileUpload, FileUploadInput, FileUploads};
+use trailbase_schema::json_schema::{FileUpload, FileUploadRequest};
 use trailbase_sqlite::Value;
 use trailbase_sqlite::to_sql::ToSqlProxy;
 use trailbase_sqlvalue::SqlValue;
@@ -66,7 +66,7 @@ impl InsertParams {
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
-    multipart_files: Option<Vec<FileUploadInput>>,
+    multipart_files: Option<Vec<FileUploadRequest>>,
   ) -> Result<(Self, FileMetadataContents), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataContents = vec![];
@@ -187,7 +187,7 @@ impl UpdateParams {
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
-    multipart_files: Option<Vec<FileUploadInput>>,
+    multipart_files: Option<Vec<FileUploadRequest>>,
     pk_column_name: String,
     pk_column_value: Value,
   ) -> Result<(Self, FileMetadataContents), ParamsError> {
@@ -365,7 +365,7 @@ pub enum Params<'a> {
 
 fn extract_files_from_multipart<S: ColumnAccessor>(
   accessor: &S,
-  multipart_files: Vec<FileUploadInput>,
+  multipart_files: Vec<FileUploadRequest>,
   params: &mut Vec<NamedParam>,
 ) -> Result<FileMetadataContents, ParamsError> {
   let files: Vec<(String, FileUpload, Option<Vec<u8>>)> = multipart_files
@@ -377,7 +377,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           "Multipart form upload missing name property",
         ));
       };
-      return Ok((col_name, file_metadata, Some(content.0)));
+      return Ok((col_name, file_metadata, Some(content)));
     })
     .collect::<Result<_, ParamsError>>()?;
 
@@ -497,12 +497,12 @@ fn extract_params_and_files_from_json(
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
 
-      let param = Value::Text(serde_json::to_string(&FileUploads(
-        uploads
+      let param = Value::Text(serde_json::to_string(
+        &uploads
           .iter()
           .map(|(metadata, _content)| metadata.clone())
-          .collect(),
-      ))?);
+          .collect::<Vec<_>>(),
+      )?);
 
       return Ok((param, Some(uploads)));
     }
@@ -544,21 +544,21 @@ fn extract_param_and_file_from_json_value(
     #[derive(Debug, Deserialize)]
     #[serde(untagged)]
     enum InputOrMetadata {
-      Input(FileUploadInput),
+      Input(FileUploadRequest),
       Metadata(FileUpload),
     }
 
     return match serde_json::from_value::<InputOrMetadata>(value)? {
       InputOrMetadata::Input(file_upload_input) => {
         let (_col_name, metadata, content) = file_upload_input.consume()?;
-        Ok((metadata, Some(content.0)))
+        Ok((metadata, Some(content)))
       }
       InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
     };
   } else {
-    let file_upload_input = serde_json::from_value::<FileUploadInput>(value)?;
+    let file_upload_input = serde_json::from_value::<FileUploadRequest>(value)?;
     let (_col_name, metadata, content) = file_upload_input.consume()?;
-    Ok((metadata, Some(content.0)))
+    Ok((metadata, Some(content)))
   }
 }
 
@@ -913,7 +913,7 @@ mod tests {
   }
 
   #[test]
-  fn test_for_update_skips_stored_file_upload() {
+  fn test_update_params_skip_file_upload() {
     let allocator = Bump::new();
     let table: Table = (&parse_into_statement(
       &allocator,
@@ -937,31 +937,28 @@ mod tests {
 
     let id: i64 = 5;
 
+    // Test: FileUploadRequest w/o 'data' field, should be skipped (for non-admin).
     {
-      let avatar = json!({
-        "filename": "avatar.jpg",
-        "original_filename": "avatar.jpg",
-        "content_type": "image/jpeg",
-        "mime_type": "image/jpeg"
-      });
-
-      let value = json!({
-        "name": "Alice",
-        "avatar": avatar,
-      });
-
-      let obj = indexmap::IndexMap::<String, SqlValue>::from([
-        ("name".to_string(), SqlValue::Text("Alice".to_string())),
-        (
-          "avatar".to_string(),
-          SqlValue::Text(serde_json::to_string(&avatar).unwrap()),
-        ),
-      ]);
-
       let (params, files) = UpdateParams::for_admin_update(
         &metadata,
         registry.clone(),
-        obj,
+        indexmap::IndexMap::<String, SqlValue>::from([
+          ("name".to_string(), SqlValue::Text("Alice".to_string())),
+          (
+            "avatar".to_string(),
+            SqlValue::Text(
+              // We send metadata containing the internal object-store id of an already uploaded
+              // file, we thus don't need "data". This should be replaced by opaque tokens in the
+              // future.
+              serde_json::to_string(&json!({
+                "id": uuid::Uuid::new_v4().to_string(),
+                "filename": "avatar.jpg",
+                "content_type": "image/jpeg",
+              }))
+              .unwrap(),
+            ),
+          ),
+        ]),
         "id".to_string(),
         SqlValue::Integer(id),
       )
@@ -969,7 +966,8 @@ mod tests {
 
       let UpdateParams { params, .. } = params;
 
-      // Avatar file-column should not be skipped but the file data is absent.
+      // Admin version does not skip metadata (containing id and referencing already uploaded file).
+      // This will be replaced with tokens.
       assert_eq!(
         vec![":name", ":avatar"],
         params
@@ -981,11 +979,19 @@ mod tests {
       assert!(files[0].1.is_none());
 
       // Now make sure that the non-admin version rejects metadata inputs.
+      let non_admin_value = json!({
+        "name": "Alice",
+        "avatar": {
+          "filename": "avatar.jpg",
+          "content_type": "image/jpeg",
+        },
+      });
+
       assert_matches!(
         UpdateParams::new(
           &metadata,
           &registry,
-          json_row_from_value(value).unwrap(),
+          json_row_from_value(non_admin_value).unwrap(),
           None,
           "id".to_string(),
           Value::Integer(id),
@@ -995,7 +1001,7 @@ mod tests {
       );
     }
 
-    // Test: FileUploadInput with 'data' field should NOT be skipped.
+    // Test: FileUploadRequest with 'data' field should NOT be skipped.
     {
       let png_data = BASE64_URL_SAFE.encode([137u8, 80, 78, 71]);
       let value_with_new_file = json!({

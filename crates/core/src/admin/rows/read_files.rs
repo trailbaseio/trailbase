@@ -4,7 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 use trailbase_schema::db::QualifiedName;
-use trailbase_schema::json_schema::FileUploads;
+use trailbase_schema::json_schema::FileUpload;
 use ts_rs::TS;
 use utoipa::IntoParams;
 
@@ -78,7 +78,7 @@ pub async fn read_files_handler(
     )));
   };
 
-  let FileUploads(mut file_uploads) = run_get_files_query(
+  let mut file_uploads: Vec<FileUpload> = run_get_files_query(
     &conn,
     &table_name.into(),
     file_column_meta,
