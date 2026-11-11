@@ -157,8 +157,8 @@ pub(crate) fn backup(
     dst,
     dst_schema.unwrap_or("main"),
   )?;
-  let mut retries = 0;
 
+  let mut retries = 0;
   loop {
     match backup.step(/* num_pages= */ 128)? {
       StepResult::Done => {
@@ -168,10 +168,10 @@ pub(crate) fn backup(
         retries = 0;
         // Just continue.
       }
-      StepResult::Locked | StepResult::Busy => {
+      StepResult::Busy | StepResult::Locked => {
         retries += 1;
         if retries > 100 {
-          return Err(Error::Other("Backup failed".into()));
+          return Err(Error::Other("Backup failed: busy or locked".into()));
         }
 
         // Retry.

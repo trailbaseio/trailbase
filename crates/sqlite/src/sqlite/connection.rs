@@ -286,44 +286,26 @@ impl Connection {
     });
   }
 
-  /// Only backups the "main" scheme.
-  ///
-  /// TODO: We should probably remove this flavor in favor of backup_to_dir below.
-  pub async fn backup(
-    &self,
-    path: impl AsRef<std::path::Path>,
-    schema: Option<&str>,
-  ) -> Result<(), Error> {
-    let schema = schema.map(|s| s.to_string());
-    let mut dst = rusqlite::Connection::open(path)?;
-    return self
-      .exec
-      .call_reader(move |src_conn| -> Result<(), Error> {
-        return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
-      })
-      .await;
-  }
-
-  /// Only backups the "main" scheme.
   pub async fn backup_to_dir(
     &self,
     dir: impl AsRef<std::path::Path>,
     schema: Option<&str>,
   ) -> Result<(), Error> {
-    let Some(fname) = self.exec.path().and_then(|p| {
-      std::path::PathBuf::from(p)
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-    }) else {
-      return Err(Error::Other("in-memory DBs not supported".into()));
-    };
+    let path = self.exec.path();
+    let fname = path
+      .as_ref()
+      .and_then(|p| p.file_name())
+      .unwrap_or_else(|| std::ffi::OsStr::new(":memory:"));
 
-    let schema = schema.map(|s| s.to_string());
     let mut dst = rusqlite::Connection::open(dir.as_ref().join(fname))?;
     return self
       .exec
-      .call_reader(move |src_conn| -> Result<(), Error> {
-        return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
+      .call_reader({
+        let schema = schema.map(|s| s.to_string());
+
+        move |src_conn| -> Result<(), Error> {
+          return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
+        }
       })
       .await;
   }

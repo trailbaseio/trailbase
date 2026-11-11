@@ -83,15 +83,16 @@ impl Executor {
     };
 
     let write_conn = new_conn(/* read_only= */ read_only.unwrap_or(false))?;
-    let path = write_conn.path().map(String::from);
-    let in_memory = path.as_ref().is_none_or(|s| {
-      // Returns empty string for in-memory databases.
-      return s.is_empty();
-    });
+    let path = get_path(&write_conn);
+    // NOTE: We can't actually reliably distinguish between in-memory and temporary because
+    // `rusqlite::Connection::path()` returns `Some("")` for either :/
+    let in_memory = path.is_none();
 
     let num_threads: usize = match (in_memory, num_threads.unwrap_or(1)) {
-      (true, _) => {
-        // We cannot share an in-memory database across threads, they're all independent.
+      (true, n) => {
+        if n != 1 {
+          warn!("In-memory DB requested with {n} threads, falling back to 1.");
+        }
         1
       }
       (false, 0) => {
@@ -155,10 +156,7 @@ impl Executor {
         .map_err(|err| Error::Other(format!("spawning ro thread {index} failed: {err}").into()))?;
     }
 
-    debug!(
-      "Opened SQLite DB '{}' ({num_threads} threads, in-memory: {in_memory})",
-      path.as_deref().unwrap_or("<in-memory>")
-    );
+    debug!("Opened SQLite DB {path:?} ({num_threads} threads, in-memory: {in_memory})",);
 
     let conn = Self {
       reader: shared_read_sender,
@@ -175,9 +173,8 @@ impl Executor {
     return self.conns.read().0.len();
   }
 
-  pub fn path(&self) -> Option<String> {
-    let lock = self.conns.read();
-    return lock.0.first().and_then(|c| c.path().map(String::from));
+  pub fn path(&self) -> Option<std::path::PathBuf> {
+    return self.conns.read().0.first().and_then(get_path);
   }
 
   #[inline]
@@ -314,14 +311,16 @@ impl Executor {
     }
 
     // NOTE: We need to close in reverse order to hit the RW connection last and allow final cleanup
-    // to succeed.
+    // (implicit check-pointing) to succeed.
     let mut errors = vec![];
     for (idx, conn) in std::mem::take(&mut self.conns.write().0)
       .into_iter()
       .enumerate()
       .rev()
     {
-      if idx == 0 && truncate {
+      // If requested, we also run an explicit TRUNCATE on the final RW connection to check-point
+      // even if the DB is held open by other connections.
+      if truncate && idx == 0 && path.is_some() {
         match conn.wal_checkpoint_v2::<&str>(None, rusqlite::wal::CheckpointMode::TRUNCATE) {
           Ok((log, ckpt)) => {
             if log < 0 || ckpt < 0 {
@@ -442,4 +441,16 @@ fn receiver_closed(err: crossfire::RecvError) -> Error {
   error!("Use Sqlite connection concurrently being shut down: {err}");
 
   return Error::ConnectionClosed;
+}
+
+/// Returns a "saner" path for `rusqlite::Connection`.
+///
+/// rusqlite::Connection::path() returns `Some("")` for temporary and in-memory DBs. It's unclear
+/// when it actually returns `None` and what it means. Thus map both to empty. Sadly, this also
+/// means we cannot distinguish between in-memory and temporary :/.
+fn get_path(conn: &rusqlite::Connection) -> Option<std::path::PathBuf> {
+  return match conn.path() {
+    Some(p) if !p.is_empty() => Some(p.into()),
+    _ => None,
+  };
 }

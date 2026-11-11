@@ -4,10 +4,29 @@ use rusqlite::{ErrorCode, ffi};
 use std::assert_matches;
 use std::borrow::Cow;
 
-use crate::sqlite::connection::{Connection, Options};
+use crate::sqlite::connection::Connection;
+use crate::sqlite::executor::{Executor, Options};
 use crate::sqlite::extract_row_id;
 use crate::{Database, Error, SyncConnectionTrait, Value, ValueType};
 use crate::{named_params, params};
+
+#[tokio::test]
+async fn open_in_memory_executor() {
+  let executor = Executor::new(
+    || -> Result<_, Error> {
+      return Ok(rusqlite::Connection::open(":memory:")?);
+    },
+    Options {
+      // Deliberately non-sensical option to test fallback.
+      num_threads: Some(10000),
+      ..Default::default()
+    },
+  )
+  .unwrap();
+
+  assert_eq!(None, executor.path());
+  assert_eq!(1, executor.threads());
+}
 
 #[tokio::test]
 async fn open_in_memory_test() {
@@ -670,13 +689,14 @@ async fn test_execute_returning_rows() {
 async fn test_backup() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
 
-  let src_path = tmp_dir.path().join("src.db");
-  let dst_path = tmp_dir.path().join("dst.db");
+  let src_db = tmp_dir.path().join("src.db");
+  let aux_db = tmp_dir.path().join("aux.db");
 
-  let aux_path = tmp_dir.path().join("aux.db");
+  let dst_path = tmp_dir.path().join("backup");
+  std::fs::create_dir_all(&dst_path).unwrap();
 
   let conn = Connection::with_opts(
-    || rusqlite::Connection::open(&src_path).map_err(Error::Rusqlite),
+    || rusqlite::Connection::open(&src_db).map_err(Error::Rusqlite),
     Options {
       ..Default::default()
     },
@@ -691,10 +711,7 @@ async fn test_backup() {
       .unwrap();
   };
 
-  conn
-    .attach(aux_path.to_str().unwrap(), "aux")
-    .await
-    .unwrap();
+  conn.attach(aux_db.to_str().unwrap(), "aux").await.unwrap();
 
   conn
     .execute_batch(
@@ -712,7 +729,7 @@ async fn test_backup() {
     .await
     .unwrap();
 
-  conn.backup(&dst_path, None).await.unwrap();
+  conn.backup_to_dir(&dst_path, None).await.unwrap();
 
   // Change the state before restoring.
   conn
@@ -733,7 +750,7 @@ async fn test_backup() {
   assert_eq!(4, count("test").await);
   assert_eq!(2, count("other").await);
 
-  conn.restore(&dst_path, None).await.unwrap();
+  conn.restore(dst_path.join("src.db"), None).await.unwrap();
 
   assert_eq!(2, count("test").await,);
   assert_eq!(1, count("aux.test").await,);
@@ -747,8 +764,8 @@ async fn test_backup() {
   );
 
   // Now backup aux and restore back to main
-  conn.backup(&dst_path, Some("aux")).await.unwrap();
-  conn.restore(&dst_path, None).await.unwrap();
+  conn.backup_to_dir(&dst_path, Some("aux")).await.unwrap();
+  conn.restore(dst_path.join("aux.db"), None).await.unwrap();
 
   assert_eq!(1, count("test").await);
 }
