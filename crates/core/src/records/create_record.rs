@@ -12,7 +12,7 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
+use crate::records::params::{FileMetadataAndPayload, InsertParams, JsonRow, ParamsError};
 use crate::records::queries::InsertOrReplaceRecordApiQuery;
 use crate::records::transaction::{Op, OpResult, WriteQuery};
 use crate::records::{RecordApi, RecordError};
@@ -245,7 +245,7 @@ pub(crate) fn build_insert_params(
   user: Option<&User>,
   mut record: JsonRow,
   files: Option<Vec<FileUploadRequest>>,
-) -> Result<(InsertParams, FileMetadataContents), ParamsError> {
+) -> Result<(InsertParams, FileMetadataAndPayload), ParamsError> {
   // Optionally insert user.
   if api.insert_autofill_missing_user_id_columns()
     && let Some(user) = user

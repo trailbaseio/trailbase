@@ -20,7 +20,7 @@ mod error;
 pub use error::ParamsError;
 
 /// Contains Metadata (i.e. column contents) and file contents.
-pub(crate) type FileMetadataContents = Vec<(FileUpload, Option<Vec<u8>>)>;
+pub(crate) type FileMetadataAndPayload = Vec<(FileUpload, Payload)>;
 
 /// A JSON object representing a DB record/row.
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
@@ -67,9 +67,9 @@ impl InsertParams {
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadRequest>>,
-  ) -> Result<(Self, FileMetadataContents), ParamsError> {
+  ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
-    let mut files: FileMetadataContents = vec![];
+    let mut files: FileMetadataAndPayload = vec![];
 
     // Insert parameters case.
     for (key, value) in row {
@@ -190,9 +190,9 @@ impl UpdateParams {
     multipart_files: Option<Vec<FileUploadRequest>>,
     pk_column_name: String,
     pk_column_value: Value,
-  ) -> Result<(Self, FileMetadataContents), ParamsError> {
+  ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
-    let mut files: FileMetadataContents = vec![];
+    let mut files: FileMetadataAndPayload = vec![];
 
     // Update parameters case.
     for (key, value) in row {
@@ -268,11 +268,11 @@ impl UpdateParams {
     row: indexmap::IndexMap<String, SqlValue>,
     pk_column_name: String,
     pk_column_value: SqlValue,
-  ) -> Result<(Self, FileMetadataContents), ParamsError> {
+  ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let pk_column_param = pk_column_value.try_into()?;
 
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
-    let mut files: FileMetadataContents = vec![];
+    let mut files: FileMetadataAndPayload = vec![];
 
     // Update parameters case.
     for (key, value) in row {
@@ -367,26 +367,21 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
   accessor: &S,
   multipart_files: Vec<FileUploadRequest>,
   params: &mut Vec<NamedParam>,
-) -> Result<FileMetadataContents, ParamsError> {
-  let files: Vec<(String, FileUpload, Option<Vec<u8>>)> = multipart_files
+) -> Result<FileMetadataAndPayload, ParamsError> {
+  let files: Vec<(String, FileUpload, Payload)> = multipart_files
     .into_iter()
     .map(|file| {
       let (col_name, file_metadata, payload) =
         file.consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
 
-      let Payload::Bytes(contents) = payload else {
-        return Err(ParamsError::UnexpectedType(
-          "token",
-          "Only payload supported thus far".to_string(),
-        ));
-      };
-
+      // TODO: If we require `FileUploadData::name` to be present, maybe we should make it
+      // required.
       let Some(col_name) = col_name else {
         return Err(ParamsError::Column(
           "Multipart form upload missing name property",
         ));
       };
-      return Ok((col_name, file_metadata, Some(contents)));
+      return Ok((col_name, file_metadata, payload));
     })
     .collect::<Result<_, ParamsError>>()?;
 
@@ -453,7 +448,7 @@ fn extract_params_and_files_from_json(
   #[allow(unused)] is_geometry: bool,
   value: serde_json::Value,
   allow_file_metadata: bool,
-) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
+) -> Result<(Value, Option<FileMetadataAndPayload>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json_metadata else {
     #[cfg(any(feature = "geos", feature = "geos-static"))]
@@ -497,7 +492,7 @@ fn extract_params_and_files_from_json(
         return Err(ParamsError::UnexpectedType("array", format!("{value:?}")));
       };
 
-      let uploads: FileMetadataContents = array
+      let uploads: FileMetadataAndPayload = array
         .into_iter()
         .map(|value| {
           let (metadata, contents) =
@@ -543,7 +538,7 @@ fn extract_params_and_files_from_json(
 fn extract_param_and_file_from_json_value(
   value: serde_json::Value,
   allow_file_metadata: bool,
-) -> Result<(FileUpload, Option<Vec<u8>>), ParamsError> {
+) -> Result<(FileUpload, Payload), ParamsError> {
   if allow_file_metadata {
     // We (used to) allow inputs to either be "fresh" inputs containing actual data bytes or metadata
     // round-tripped from prior reads (where the data is already stored). The latter is useful for
@@ -569,9 +564,12 @@ fn extract_param_and_file_from_json_value(
           ));
         };
 
-        Ok((metadata, Some(contents)))
+        Ok((metadata, Payload::Bytes(contents)))
       }
-      InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
+      InputOrMetadata::Metadata(metadata) => {
+        // FIXME: We should use token instead.
+        Ok((metadata, Payload::Id))
+      }
     };
   } else {
     let file_upload_input = serde_json::from_value::<FileUploadRequest>(value)?;
@@ -585,7 +583,7 @@ fn extract_param_and_file_from_json_value(
       ));
     };
 
-    Ok((metadata, Some(contents)))
+    Ok((metadata, Payload::Bytes(contents)))
   }
 }
 
@@ -1003,7 +1001,7 @@ mod tests {
           .collect::<Vec<_>>()
       );
       assert_eq!(1, files.len());
-      assert!(files[0].1.is_none());
+      assert_matches!(files[0].1, Payload::Id);
 
       // Now make sure that the non-admin version rejects metadata inputs.
       let non_admin_value = json!({
@@ -1061,7 +1059,7 @@ mod tests {
           .collect::<Vec<_>>()
       );
       assert_eq!(1, files.len());
-      assert!(files[0].1.is_some());
+      assert_matches!(files[0].1, Payload::Bytes(_));
     }
   }
 }
