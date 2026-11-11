@@ -12,7 +12,7 @@ use crate::config::proto;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
-use crate::records::params::{InsertParams, JsonRow};
+use crate::records::params::{InsertParams, JsonRow, ParamOptions};
 use crate::records::queries::run_get_file_query;
 use crate::records::queries::run_insert_or_replace_query;
 use crate::util::uuid_to_b64;
@@ -101,7 +101,10 @@ pub async fn create_avatar_handler(
     &*AVATAR_TABLE_METADATA,
     &state.json_schema_registry().load(),
     record,
-    Some(files),
+    ParamOptions {
+      multipart_files: Some(files),
+      file_token_decoder: None,
+    },
   )
   .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 

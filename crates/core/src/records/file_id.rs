@@ -1,30 +1,28 @@
 use base64::prelude::*;
 use jsonwebtoken::jwk::{AlgorithmParameters, Jwk, OctetKeyParameters, OctetKeyType};
-use serde::{Deserialize, Serialize};
-use trailbase_schema::json_schema::{FileUpload, FileUploadResponse};
+use trailbase_schema::db::QualifiedNameEscaped;
+use trailbase_schema::json_schema::{FileToken, FileUpload, FileUploadResponse};
 
-use crate::aes::{KeyType, encrypt, generate_random_key};
+use crate::InitError;
+use crate::aes::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::data_dir::DataDir;
-use crate::records::RecordError;
 
-fn aes256_from_jwk(json: &str) -> Result<KeyType, RecordError> {
-  let jwk: Jwk = serde_json::from_str(json).map_err(|err| RecordError::Internal(err.into()))?;
+fn aes256_from_jwk(json: &str) -> Result<KeyType, InitError> {
+  let jwk: Jwk = serde_json::from_str(json)?;
   let AlgorithmParameters::OctetKey(oct) = &jwk.algorithm else {
-    return Err(RecordError::Internal("invalid jwk".into()));
+    return Err(InitError::Parse("invalid jwk".into()));
   };
 
-  let bytes = BASE64_URL_SAFE_NO_PAD
-    .decode(&oct.value)
-    .map_err(|err| RecordError::Internal(err.into()))?;
+  let bytes = BASE64_URL_SAFE_NO_PAD.decode(&oct.value)?;
   let key: KeyType = bytes
     .as_slice()
     .try_into()
-    .map_err(|err: std::array::TryFromSliceError| RecordError::Internal(err.into()))?;
+    .map_err(|err: std::array::TryFromSliceError| InitError::Parse(err.into()))?;
 
   return Ok(key);
 }
 
-fn get_or_init_aes256_file_key(data_dir: &DataDir) -> Result<KeyType, RecordError> {
+pub(crate) fn get_or_init_aes256_file_key(data_dir: &DataDir) -> Result<KeyType, InitError> {
   let path = data_dir.secrets_path().join("file.jwk");
 
   let contents = match std::fs::read_to_string(&path) {
@@ -35,61 +33,25 @@ fn get_or_init_aes256_file_key(data_dir: &DataDir) -> Result<KeyType, RecordErro
         key_type: OctetKeyType::Octet,
         value: BASE64_URL_SAFE_NO_PAD.encode(new_key),
       });
-      let contents =
-        serde_json::to_string(&jwk).map_err(|err| RecordError::Internal(err.into()))?;
+      let contents = serde_json::to_string(&jwk)?;
 
-      std::fs::write(&path, &contents).map_err(|err| RecordError::Internal(err.into()))?;
+      std::fs::write(&path, &contents)?;
 
       contents
     }
     Err(err) => {
-      return Err(RecordError::Internal(err.into()));
+      return Err(err.into());
     }
   };
 
   return aes256_from_jwk(&contents);
 }
 
-#[derive(Deserialize, Serialize)]
-struct FileToken {
-  /// Name of the table, the file is from.
-  table_name: String,
-  /// Column name the file is from. Needs to be included, triggers are installed per-column,
-  /// consequently moving between columns is not possible w/o the file being deleted.
-  column_name: String,
-  /// Record's primary key.
-  pk: serde_json::Value,
-
-  /// Original fileupload being round-tripped.
-  metadata: FileUpload,
-}
-
-fn file_metadata_sanitizer_impl(
-  key: &KeyType,
-  table_name: &str,
-  column_name: &str,
-  pk: &trailbase_sqlite::Value,
-  metadata: FileUpload,
-) -> Result<FileUploadResponse, Box<dyn std::error::Error + Sync + Send>> {
-  return Ok(FileUploadResponse {
-    content_type: metadata.mime_type.clone().or(metadata.content_type.clone()),
-    original_filename: metadata.original_filename.clone(),
-    filename: metadata.filename.clone(),
-    token: serde_json::to_string(&FileToken {
-      table_name: table_name.to_string(),
-      column_name: column_name.to_string(),
-      pk: trailbase_schema::json::value_ref_to_flat_json_owned(pk)?,
-      metadata,
-    })
-    .ok()
-    .and_then(|token| encrypt(key, table_name.as_bytes(), token.as_bytes()).ok())
-    .map(|bytes| BASE64_STANDARD_NO_PAD.encode(&bytes)),
-  });
-}
-
+/// Takes the FileMetadata during reads and builds an opaque encrypted token and converts everything
+/// into a FileUploadResponse.
 pub fn file_metadata_sanitizer(
   key: &KeyType,
-  table_name: &str,
+  table_name: &QualifiedNameEscaped,
   column_name: &str,
   pk: &trailbase_sqlite::Value,
   metadata: FileUpload,
@@ -103,4 +65,41 @@ pub fn file_metadata_sanitizer(
       metadata,
     )?)?,
   ));
+}
+
+fn file_metadata_sanitizer_impl(
+  key: &KeyType,
+  table_name: &QualifiedNameEscaped,
+  column_name: &str,
+  pk: &trailbase_sqlite::Value,
+  metadata: FileUpload,
+) -> Result<FileUploadResponse, Box<dyn std::error::Error + Sync + Send>> {
+  return Ok(FileUploadResponse {
+    content_type: metadata.mime_type.clone().or(metadata.content_type.clone()),
+    original_filename: metadata.original_filename.clone(),
+    filename: metadata.filename.clone(),
+    token: serde_json::to_string(&FileToken {
+      table_name: table_name.to_string(),
+      column_name: column_name.to_string(),
+      pk: pk.clone(),
+      metadata,
+    })
+    .ok()
+    .and_then(|token| encrypt(key, table_name.as_bytes(), token.as_bytes()).ok())
+    .map(|bytes| BASE64_STANDARD_NO_PAD.encode(&bytes)),
+  });
+}
+
+pub fn file_token_decrypt(
+  key: &KeyType,
+  table_name: &QualifiedNameEscaped,
+  token: &str,
+) -> Result<FileToken, Box<dyn std::error::Error + Sync + Send>> {
+  let json = decrypt(
+    key,
+    table_name.as_bytes(),
+    &BASE64_STANDARD_NO_PAD.decode(token)?,
+  )?;
+
+  return Ok(serde_json::from_str(&String::from_utf8_lossy(&json))?);
 }

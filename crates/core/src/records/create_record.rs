@@ -12,7 +12,9 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
+use crate::records::params::{
+  FileMetadataAndPayload, InsertParams, JsonRow, ParamOptions, ParamsError,
+};
 use crate::records::queries::InsertOrReplaceRecordApiQuery;
 use crate::records::transaction::{Op, OpResult, WriteQuery};
 use crate::records::{RecordApi, RecordError};
@@ -245,7 +247,7 @@ pub(crate) fn build_insert_params(
   user: Option<&User>,
   mut record: JsonRow,
   files: Option<Vec<FileUploadRequest>>,
-) -> Result<(InsertParams, FileMetadataContents), ParamsError> {
+) -> Result<(InsertParams, FileMetadataAndPayload), ParamsError> {
   // Optionally insert user.
   if api.insert_autofill_missing_user_id_columns()
     && let Some(user) = user
@@ -265,7 +267,10 @@ pub(crate) fn build_insert_params(
     api,
     &state.json_schema_registry().load_full(),
     record,
-    files,
+    ParamOptions {
+      multipart_files: files,
+      file_token_decoder: None,
+    },
   );
 }
 
@@ -281,6 +286,9 @@ pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String
 
 #[cfg(test)]
 mod tests {
+  use serde_json::json;
+  use trailbase_sqlite::params;
+
   use super::*;
   use crate::app_state::*;
   use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
@@ -288,9 +296,6 @@ mod tests {
   use crate::records::*;
   use crate::test_util::*;
   use crate::util::{id_to_b64, uuid_to_b64};
-
-  use serde_json::json;
-  use trailbase_sqlite::params;
 
   #[tokio::test]
   async fn test_simple_record_api_create() {

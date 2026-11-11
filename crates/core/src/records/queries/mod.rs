@@ -8,7 +8,7 @@ use trailbase_sqlite::{Connection, Value};
 use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, InsertParams, UpdateParams};
+use crate::records::params::{FileMetadataAndPayload, InsertParams, UpdateParams};
 use crate::schema_metadata::JsonColumnMetadata;
 
 mod delete;
@@ -39,7 +39,7 @@ pub(crate) async fn run_insert_or_replace_query(
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
   params: InsertParams,
-  files: FileMetadataContents,
+  files: FileMetadataAndPayload,
 ) -> Result<Value, RecordError> {
   let query = insert::InsertOrReplaceQuery::new(
     conn.connection_type(),
@@ -85,7 +85,7 @@ pub(crate) async fn run_update_query(
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   params: UpdateParams,
-  files: FileMetadataContents,
+  files: FileMetadataAndPayload,
 ) -> Result<(), RecordError> {
   let query = update::UpdateQuery::new(conn.connection_type(), table_name, params)?;
 

@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::records::params::UpdateParams;
+use crate::records::params::{ParamOptions, UpdateParams};
 use crate::records::queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
@@ -75,10 +75,13 @@ pub async fn update_row_handler(
 
   let (params, files) = UpdateParams::for_admin_update(
     table_metadata,
-    state.json_schema_registry().load_full(),
+    &state.json_schema_registry().load(),
+    (pk_col, request.primary_key_value),
     request.row,
-    pk_col.clone(),
-    request.primary_key_value,
+    ParamOptions {
+      multipart_files: None,
+      file_token_decoder: None,
+    },
   )?;
 
   run_update_query(
@@ -96,9 +99,8 @@ pub async fn update_row_handler(
 #[cfg(test)]
 mod tests {
   use axum::extract::Query;
-  use std::collections::HashMap;
-
   use axum::extract::RawQuery;
+  use std::collections::HashMap;
   use trailbase_schema::json_schema::{FileUpload, FileUploadData};
 
   use super::*;

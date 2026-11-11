@@ -7,6 +7,7 @@ use std::sync::Arc;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
 
+use crate::aes::KeyType;
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
 use crate::config::{
@@ -20,6 +21,7 @@ use crate::email::Mailer;
 use crate::init_error::InitError;
 use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
+use crate::records::file_id::get_or_init_aes256_file_key;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::records::{RecordApi, RecordApiByName};
 use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_config};
@@ -79,6 +81,7 @@ struct InternalState {
 
   record_apis: AsyncReactive<HashSet<RecordApiByName>>,
   subscription_manager: SubscriptionManager,
+  file_token_key: KeyType,
   object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
@@ -247,6 +250,7 @@ impl AppState {
           jwt,
           record_apis: record_apis.clone(),
           subscription_manager: SubscriptionManager::new(record_apis),
+          file_token_key: get_or_init_aes256_file_key(&args.data_dir)?,
           object_store,
           #[cfg(feature = "wasm")]
           wasm: crate::wasm::WasmState::init(
@@ -403,6 +407,10 @@ impl AppState {
 
   pub(crate) fn objectstore(&self) -> &Arc<dyn ObjectStore> {
     return &self.state.object_store;
+  }
+
+  pub(crate) fn file_token_key(&self) -> &KeyType {
+    return &self.state.file_token_key;
   }
 
   pub(crate) fn jobs(&self) -> Guard<Arc<JobRegistry>> {
@@ -861,6 +869,7 @@ mod test_utils {
         jwt: crate::auth::jwt::test_jwt_helper(),
         record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
+        file_token_key: crate::aes::generate_random_key(),
         object_store,
         #[cfg(feature = "wasm")]
         wasm: crate::wasm::WasmState::default(),

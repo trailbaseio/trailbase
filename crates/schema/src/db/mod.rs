@@ -17,6 +17,14 @@ impl QualifiedNameEscaped {
   }
 }
 
+impl std::ops::Deref for QualifiedNameEscaped {
+  type Target = str;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
 impl From<QualifiedName> for QualifiedNameEscaped {
   fn from(name: QualifiedName) -> Self {
     return Self::new(&name);

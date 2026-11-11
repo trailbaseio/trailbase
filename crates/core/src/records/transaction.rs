@@ -12,7 +12,7 @@ use crate::config::proto;
 use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
-use crate::records::params::UpdateParams;
+use crate::records::params::{ParamOptions, UpdateParams};
 use crate::records::queries::{
   DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
 };
@@ -144,10 +144,16 @@ pub async fn record_transactions_handler(
           let (params, files) = UpdateParams::new(
             &api,
             &state.json_schema_registry().load(),
+            (
+              &api.record_pk_column().column.name,
+              api.primary_key_to_value(record_id)?,
+            ),
             extract_record(value)?,
-            None,
-            api.record_pk_column().column.name.clone(),
-            api.primary_key_to_value(record_id)?,
+            ParamOptions {
+              multipart_files: None,
+              // FIXME: pass decoder.
+              file_token_decoder: None,
+            },
           )
           .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
@@ -348,9 +354,8 @@ pub(crate) fn apply_ops(
 
 #[cfg(test)]
 mod tests {
-  use std::assert_matches;
-
   use serde_json::json;
+  use std::assert_matches;
 
   use super::*;
   use crate::app_state::*;

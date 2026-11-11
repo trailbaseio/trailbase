@@ -4,6 +4,34 @@ use uuid::Uuid;
 
 use crate::json_schema::error::Error;
 
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub struct FileToken {
+  /// Name of the table, the file is from.
+  pub table_name: String,
+  /// Column name the file is from. Needs to be included, triggers are installed per-column,
+  /// consequently moving between columns is not possible w/o the file being deleted.
+  pub column_name: String,
+  /// Record's primary key.
+  pub pk: trailbase_sqlite::Value,
+
+  /// Original fileupload being round-tripped.
+  pub metadata: FileUpload,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Payload {
+  Bytes(Vec<u8>),
+  Token {
+    table_name: String,
+    column_name: String,
+    pk: trailbase_sqlite::Value,
+  },
+  // TODO: Remove after switching everything to tokens.
+  Id,
+}
+
+pub type FileTokenDecoder<'a> = dyn Fn(&str) -> Result<FileToken, Error> + 'a;
+
 /// Wire representation of upload requests, which may either contain data or use a token to
 /// represent round-tripped data for update operations.
 #[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
@@ -20,11 +48,35 @@ pub enum FileUploadRequest {
 }
 
 impl FileUploadRequest {
-  /// Returns (name, json, bytes).
-  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), Error> {
+  /// Returns (name, json, payload (token or bytes)).
+  pub fn consume(
+    self,
+    token_decoder: Option<&FileTokenDecoder>,
+  ) -> Result<(Option<String>, FileUpload, Payload), Error> {
     return match self {
       FileUploadRequest::Data(data) => data.consume(),
-      FileUploadRequest::Token { token: _ } => Err(Error::NotImplemented),
+      FileUploadRequest::Token { token } => {
+        let Some(token_decoder) = token_decoder else {
+          return Err(Error::UnexpectedFileToken);
+        };
+
+        let FileToken {
+          table_name,
+          column_name,
+          pk,
+          metadata,
+        } = token_decoder(&token)?;
+
+        Ok((
+          Some(column_name.clone()),
+          metadata,
+          Payload::Token {
+            table_name,
+            column_name,
+            pk,
+          },
+        ))
+      }
     };
   }
 }
@@ -60,7 +112,7 @@ pub struct FileUploadData {
 
 impl FileUploadData {
   /// Returns (name, json, bytes).
-  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), Error> {
+  pub fn consume(self) -> Result<(Option<String>, FileUpload, Payload), Error> {
     let Self {
       name,
       filename,
@@ -74,7 +126,7 @@ impl FileUploadData {
     return Ok((
       name,
       FileUpload::new(Uuid::new_v4(), filename, content_type, mime_type),
-      data,
+      Payload::Bytes(data),
     ));
   }
 }
@@ -105,7 +157,7 @@ pub struct FileUploadResponse {
 }
 
 /// DB at-rest representation of FileUploads.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
   /// the two use-cases into different representations.
