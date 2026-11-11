@@ -11,11 +11,11 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_schema::json_schema::FileUpload;
+use trailbase_schema::json_schema::{FileUpload, Payload};
 use trailbase_sqlite::{ConnectionType, params};
 
 use crate::app_state::AppState;
-use crate::records::params::FileMetadataContents;
+use crate::records::params::FileMetadataAndPayload;
 
 #[derive(Debug, Error)]
 pub enum FileError {
@@ -292,7 +292,7 @@ pub(crate) struct FileManager {
 impl FileManager {
   pub(crate) async fn write(
     store: &Arc<dyn ObjectStore>,
-    files: FileMetadataContents,
+    files: FileMetadataAndPayload,
   ) -> Result<Self, Vec<FileWriteError>> {
     let results = join_all(
       files
@@ -365,7 +365,7 @@ pub(crate) struct AsyncFileManager {
 impl AsyncFileManager {
   pub(crate) fn new(
     store: Arc<dyn ObjectStore>,
-    files: FileMetadataContents,
+    files: FileMetadataAndPayload,
   ) -> (Self, AsyncFileCommitter) {
     let written_files: Arc<Mutex<Option<JoinHandle<AsyncFileManagerResult>>>> =
       Arc::new(Mutex::new(None));
@@ -410,11 +410,17 @@ impl Drop for AsyncFileManager {
 fn write_contents(
   store: &Arc<dyn object_store::ObjectStore>,
   metadata: FileUpload,
-  contents: Option<Vec<u8>>,
+  payload: Payload,
 ) -> Option<BoxFuture<'static, Result<FileUpload, FileWriteError>>> {
   // NOTE: The contents may be empty if prior writes are being round-tripped, e.g.
   // write-after-read.
-  let contents = contents?;
+  let contents = match payload {
+    Payload::Bytes(contents) => contents,
+    Payload::Id | Payload::Token { .. } => {
+      // Files are already written, nothing to write.
+      return None;
+    }
+  };
 
   let store = store.clone();
   return Some(Box::pin(async move {

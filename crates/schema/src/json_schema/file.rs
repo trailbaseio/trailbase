@@ -41,6 +41,8 @@ pub enum Payload {
     column_name: String,
     pk: trailbase_sqlite::Value,
   },
+  // TODO: Remove after switching everything to tokens.
+  Id,
 }
 
 impl FileUploadRequest {
@@ -60,7 +62,7 @@ impl FileUploadRequest {
         } = token_decoder(&token)?;
 
         Ok((
-          None,
+          Some(column_name.clone()),
           metadata,
           Payload::Token {
             table_name,
