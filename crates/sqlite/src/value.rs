@@ -1,11 +1,12 @@
 use compact_str::CompactString;
+use serde::{Deserialize, Serialize};
 
 use crate::from_sql::FromSqlError;
 
 pub type Blob = Vec<u8>;
 // pub type Blob = smallvec::SmallVec<u8; 128>;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum Value {
   /// The value is a `NULL` value.
   #[default]
