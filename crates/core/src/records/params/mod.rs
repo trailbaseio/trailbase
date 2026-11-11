@@ -6,7 +6,7 @@ use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
-use trailbase_schema::json_schema::{FileUpload, FileUploadRequest};
+use trailbase_schema::json_schema::{FileUpload, FileUploadRequest, Payload};
 use trailbase_sqlite::Value;
 use trailbase_sqlite::to_sql::ToSqlProxy;
 use trailbase_sqlvalue::SqlValue;
@@ -371,13 +371,22 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
   let files: Vec<(String, FileUpload, Option<Vec<u8>>)> = multipart_files
     .into_iter()
     .map(|file| {
-      let (col_name, file_metadata, content) = file.consume()?;
+      let (col_name, file_metadata, payload) =
+        file.consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+
+      let Payload::Bytes(contents) = payload else {
+        return Err(ParamsError::UnexpectedType(
+          "token",
+          "Only payload supported thus far".to_string(),
+        ));
+      };
+
       let Some(col_name) = col_name else {
         return Err(ParamsError::Column(
           "Multipart form upload missing name property",
         ));
       };
-      return Ok((col_name, file_metadata, Some(content)));
+      return Ok((col_name, file_metadata, Some(contents)));
     })
     .collect::<Result<_, ParamsError>>()?;
 
@@ -550,15 +559,33 @@ fn extract_param_and_file_from_json_value(
 
     return match serde_json::from_value::<InputOrMetadata>(value)? {
       InputOrMetadata::Input(file_upload_input) => {
-        let (_col_name, metadata, content) = file_upload_input.consume()?;
-        Ok((metadata, Some(content)))
+        let (_col_name, metadata, payload) = file_upload_input
+          .consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+
+        let Payload::Bytes(contents) = payload else {
+          return Err(ParamsError::UnexpectedType(
+            "token",
+            "Only payload supported thus far".to_string(),
+          ));
+        };
+
+        Ok((metadata, Some(contents)))
       }
       InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
     };
   } else {
     let file_upload_input = serde_json::from_value::<FileUploadRequest>(value)?;
-    let (_col_name, metadata, content) = file_upload_input.consume()?;
-    Ok((metadata, Some(content)))
+    let (_col_name, metadata, payload) = file_upload_input
+      .consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+
+    let Payload::Bytes(contents) = payload else {
+      return Err(ParamsError::UnexpectedType(
+        "token",
+        "Only payload supported thus far".to_string(),
+      ));
+    };
+
+    Ok((metadata, Some(contents)))
   }
 }
 
