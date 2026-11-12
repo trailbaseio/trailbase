@@ -1,12 +1,11 @@
 use axum::extract::{Path, State};
-use trailbase_schema::json_schema::Error as JsonError;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{JsonRow, UpdateParams};
+use crate::records::params::{JsonRow, ParamOptions, UpdateParams};
 use crate::records::queries::UpdateRecordApiQuery;
 
 /// Update existing record.
@@ -45,11 +44,12 @@ pub async fn update_record_handler(
   let (params, files) = UpdateParams::new(
     &api,
     &state.json_schema_registry().load(),
+    (&api.record_pk_column().column.name, record_id.clone()),
     request,
-    multipart_files,
-    &|_| Err(JsonError::NotImplemented),
-    api.record_pk_column().column.name.clone(),
-    record_id.clone(),
+    ParamOptions {
+      multipart_files,
+      file_token_decoder: None,
+    },
   )
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 

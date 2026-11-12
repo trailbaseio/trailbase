@@ -4,7 +4,7 @@ use const_format::formatcp;
 use std::sync::LazyLock;
 use trailbase_schema::db::metadata::{ColumnMetadata, TableMetadata};
 use trailbase_schema::db::sqlite::{Column, ColumnOption, QualifiedName, Table};
-use trailbase_schema::json_schema::{Error as JsonError, FileUploadRequest};
+use trailbase_schema::json_schema::FileUploadRequest;
 
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
@@ -12,7 +12,7 @@ use crate::config::proto;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
-use crate::records::params::{InsertParams, JsonRow};
+use crate::records::params::{InsertParams, JsonRow, ParamOptions};
 use crate::records::queries::run_get_file_query;
 use crate::records::queries::run_insert_or_replace_query;
 use crate::util::uuid_to_b64;
@@ -101,9 +101,9 @@ pub async fn create_avatar_handler(
     &*AVATAR_TABLE_METADATA,
     &state.json_schema_registry().load(),
     record,
-    Some(files),
-    &|_| {
-      return Err(JsonError::Other("tokens not supported for avatars".into()));
+    ParamOptions {
+      multipart_files: Some(files),
+      file_token_decoder: None,
     },
   )
   .map_err(|_| AuthError::BadRequest("parameter conversion"))?;

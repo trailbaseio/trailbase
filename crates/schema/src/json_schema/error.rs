@@ -10,6 +10,8 @@ pub enum Error {
   MissingName,
   #[error("NotImplemented")]
   NotImplemented,
+  #[error("UnexpectedFileToken")]
+  UnexpectedFileToken,
   #[error("Other")]
   Other(Box<dyn std::error::Error + Send + Sync>),
 }
