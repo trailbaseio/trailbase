@@ -7,11 +7,24 @@ import { Client } from "./client.ts";
 
 import type { WsProtocol, Operation, JsonValue } from "trailbase-bindings";
 
-export interface FileUpload {
-  content_type?: null | string;
+export interface FileUploadData {
+  name?: null | string;
   filename?: null | string;
-  mime_type?: null | string;
-  objectstore_path: string;
+  content_type?: null | string;
+  data: string | number[];
+}
+
+export interface FileUploadToken {
+  token: string;
+}
+
+export type FileUploadRequest = FileUploadData | FileUploadToken;
+
+export interface FileUploadResponse {
+  filename: string;
+  original_filename: string | null;
+  content_type: string | null;
+  token: string | null;
 }
 
 export type CompareOp =
