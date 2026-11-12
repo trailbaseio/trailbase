@@ -20,6 +20,12 @@ import type {
   Client,
   Event,
 } from "../../src/index";
+import type {
+  FileUploadData,
+  FileUploadRequest,
+  FileUploadResponse,
+  FileUploadToken,
+} from "../../src/record_api";
 
 import { serverAddress, connect } from "../util";
 import {
@@ -764,24 +770,10 @@ describe("record subscriptions", () => {
 });
 
 describe("record file operations", () => {
-  type FileUpload = {
-    // Upload
-    name?: string;
-    data?: string;
-
-    // Both.
-    filename: string;
-    content_type?: string;
-
-    // Download
-    original_filename?: string;
-    mime_type?: string;
-  };
-
   type FileUploadTable = {
     name: string | undefined;
-    single_file: FileUpload | undefined;
-    multiple_files: FileUpload[] | undefined;
+    single_file: FileUploadRequest | FileUploadResponse | undefined;
+    multiple_files: FileUploadRequest[] | FileUploadResponse[] | undefined;
   };
 
   async function testBase64FileUploads(
@@ -802,20 +794,20 @@ describe("record file operations", () => {
         filename: "test1.bin",
         content_type: "application/octet-stream",
         data: urlSafeBase64Encode(testBytes1),
-      },
+      } satisfies FileUploadData,
       multiple_files: [
         {
           name: "multi_test_1",
           filename: "test2.bin",
           content_type: "application/octet-stream",
           data: urlSafeBase64Encode(testBytes2),
-        },
+        } satisfies FileUploadData,
         {
           name: "multi_test_2",
           filename: "test3.bin",
           content_type: "application/octet-stream",
           data: base64Encode(testBytes3), // Standard base64
-        },
+        } satisfies FileUploadData,
       ],
     });
 
@@ -825,8 +817,8 @@ describe("record file operations", () => {
     expect(record.single_file).not.toBeUndefined();
     expect(record.multiple_files).not.toBeUndefined();
 
-    const singleFile = record.single_file!;
-    const multipleFiles = record.multiple_files!;
+    const singleFile = record.single_file as FileUploadResponse;
+    const multipleFiles = record.multiple_files as FileUploadResponse[];
 
     // Verify single file metadata
     expect(singleFile.original_filename).toBe("test1.bin");
@@ -873,8 +865,35 @@ describe("record file operations", () => {
     );
     expect(notFoundResponse.status).toEqual(status.NOT_FOUND);
 
-    // Clean up
+    // Update using file tokens:
+    await api.update(recordId, {
+      multiple_files: [
+        {
+          // Round trip first and skip second.
+          token: multipleFiles[0].token!,
+        } satisfies FileUploadToken,
+      ],
+    });
+
+    const multiFile1ResponseAfter = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
+    );
+    expect(new Uint8Array(await multiFile1ResponseAfter.arrayBuffer())).toEqual(
+      testBytes2,
+    );
+
+    const multiFile2ResponseAfter = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
+    );
+    expect(multiFile2ResponseAfter.status).toEqual(status.NOT_FOUND);
+
+    // Delete record and thus files.
     await api.delete(recordId);
+
+    const singleFilesResponseAfter = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
+    );
+    expect(singleFilesResponseAfter.status).toEqual(status.NOT_FOUND);
   }
 
   test("file upload base64: main DB", async () => {
