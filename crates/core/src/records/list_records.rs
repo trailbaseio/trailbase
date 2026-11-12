@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{JsonError, record_to_json_expand, record_to_json_expand_ref};
+use trailbase_schema::json_schema::FileUpload;
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::aes::{KeyType, decrypt, encrypt, generate_random_key};
@@ -101,6 +102,7 @@ pub async fn list_records_handler(
   let table_name = api.table_name();
   let pk_meta = api.record_pk_column();
   let pk_column = &pk_meta.column;
+  let pk_index = pk_meta.index;
   let is_table = api.is_table();
 
   #[cfg(any(feature = "geos", feature = "geos-static"))]
@@ -361,12 +363,31 @@ pub async fn list_records_handler(
           curr = next;
         }
 
+        let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
+          if api.has_file_columns() {
+            let table_name = api.table_name().clone();
+            let record_id = row.get_value(pk_index).expect("FIXME").clone();
+            let file_token_key = *state.file_token_key();
+
+            Some(&move |column_name: &str, metadata: FileUpload| {
+              return crate::records::file_id::file_metadata_sanitizer(
+                &file_token_key,
+                &table_name,
+                column_name,
+                &record_id,
+                metadata,
+              );
+            })
+          } else {
+            None
+          };
+
         return record_to_json_expand_ref(
           api.columns(),
           config_expand,
           row,
           Some(expand),
-          /* file_metadata_sanitizer= */ None,
+          file_metadata_sanitizer,
         )
         .map_err(|err| RecordError::Internal(err.into()));
       })
@@ -375,12 +396,31 @@ pub async fn list_records_handler(
     rows
       .iter()
       .map(|row| {
+        let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
+          if api.has_file_columns() {
+            let table_name = api.table_name().clone();
+            let record_id = row.get_value(pk_index).expect("FIXME").clone();
+            let file_token_key = *state.file_token_key();
+
+            Some(&move |column_name: &str, metadata: FileUpload| {
+              return crate::records::file_id::file_metadata_sanitizer(
+                &file_token_key,
+                &table_name,
+                column_name,
+                &record_id,
+                metadata,
+              );
+            })
+          } else {
+            None
+          };
+
         record_to_json_expand_ref(
           api.columns(),
           config_expand,
           row,
           None,
-          /* file_metadata_sanitizer= */ None,
+          file_metadata_sanitizer,
         )
       })
       .collect::<Result<Vec<_>, JsonError>>()
