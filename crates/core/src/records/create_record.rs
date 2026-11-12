@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::json_schema::FileUploadRequest;
+use trailbase_schema::json_schema::{Error as JsonError, FileUploadRequest};
 use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
 
@@ -266,6 +266,7 @@ pub(crate) fn build_insert_params(
     &state.json_schema_registry().load_full(),
     record,
     files,
+    &|_| Err(JsonError::NotImplemented),
   );
 }
 

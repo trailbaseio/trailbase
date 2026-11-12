@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::json_schema::Error as JsonError;
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
@@ -77,6 +78,7 @@ pub async fn update_row_handler(
     table_metadata,
     state.json_schema_registry().load_full(),
     request.row,
+    &|_| Err(JsonError::NotImplemented),
     pk_col.clone(),
     request.primary_key_value,
   )?;

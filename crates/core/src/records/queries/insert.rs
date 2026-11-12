@@ -135,6 +135,7 @@ mod tests {
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::Table;
   use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
+  use trailbase_schema::json_schema::Error as JsonError;
   use trailbase_sqlite::Value;
 
   use crate::config::proto;
@@ -274,6 +275,7 @@ mod tests {
         &registry,
         json_row_from_value(i.input).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
       )
       .unwrap();
 

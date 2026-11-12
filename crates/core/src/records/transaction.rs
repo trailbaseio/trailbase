@@ -2,6 +2,7 @@ use axum::extract::{Json, State};
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
+use trailbase_schema::json_schema::Error as JsonError;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use ts_rs::TS;
 use utoipa::ToSchema;
@@ -146,6 +147,7 @@ pub async fn record_transactions_handler(
             &state.json_schema_registry().load(),
             extract_record(value)?,
             None,
+            &|_| Err(JsonError::NotImplemented),
             api.record_pk_column().column.name.clone(),
             api.primary_key_to_value(record_id)?,
           )

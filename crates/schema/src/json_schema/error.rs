@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
   #[error("JSONSchema validation: {0}")]
   JsonSchema(Arc<jsonschema::ValidationError<'static>>),
@@ -10,4 +10,6 @@ pub enum Error {
   MissingName,
   #[error("NotImplemented")]
   NotImplemented,
+  #[error("Other")]
+  Other(Box<dyn std::error::Error + Send + Sync>),
 }
