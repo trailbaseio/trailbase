@@ -6,7 +6,9 @@ use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
-use trailbase_schema::json_schema::{FileUpload, FileUploadRequest, Payload};
+use trailbase_schema::json_schema::{
+  Error as JsonError, FileToken, FileUpload, FileUploadRequest, Payload,
+};
 use trailbase_sqlite::Value;
 use trailbase_sqlite::to_sql::ToSqlProxy;
 use trailbase_sqlvalue::SqlValue;
@@ -60,13 +62,13 @@ impl<'a> trailbase_sqlite::Params for InsertParamsRef<'a> {
 }
 
 impl InsertParams {
-  /// Converts a Json object + optional MultiPart files into trailbase_sqlite::Values and extracted
-  /// files.
+  /// Build SQL InsertParams from JSON inputs (including files).
   pub fn new<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadRequest>>,
+    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataAndPayload = vec![];
@@ -90,6 +92,7 @@ impl InsertParams {
         json_schema_registry,
         column,
         json.as_ref(),
+        file_token_decoder,
         *is_geometry,
         value,
         /* allow_file_metadata= */ false,
@@ -114,12 +117,18 @@ impl InsertParams {
         accessor,
         multipart_files,
         &mut params,
+        file_token_decoder,
       )?);
     }
 
     return Ok((Self { params }, files));
   }
 
+  /// Construct insertion params for admin's insert-row APIs. Unlike the record API ones, this
+  /// expects SqlValue's rather than JSON.
+  ///
+  /// TODO: Admin insertions currently don't support files. This is something that would have to
+  /// change if we wanted to allow this in the UI.
   pub fn for_admin_insert<S: ColumnAccessor>(
     accessor: &S,
     row: indexmap::IndexMap<String, SqlValue>,
@@ -183,11 +192,13 @@ impl<'a> trailbase_sqlite::Params for UpdateParamsRef<'a> {
 }
 
 impl UpdateParams {
+  /// Build SQL UpdateParams from JSON inputs (including files).
   pub fn new<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadRequest>>,
+    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
     pk_column_name: String,
     pk_column_value: Value,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
@@ -213,6 +224,7 @@ impl UpdateParams {
         json_schema_registry,
         column,
         json.as_ref(),
+        file_token_decoder,
         *is_geometry,
         value,
         /* allow_file_metadata= */ false,
@@ -249,6 +261,7 @@ impl UpdateParams {
         accessor,
         multipart_files,
         &mut params,
+        file_token_decoder,
       )?);
     }
 
@@ -262,10 +275,13 @@ impl UpdateParams {
     ));
   }
 
+  /// Construct update params for admin's update-row APIs. Unlike the record API ones, this
+  /// expects SqlValue's rather than JSON.
   pub fn for_admin_update<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: Arc<JsonSchemaRegistry>,
     row: indexmap::IndexMap<String, SqlValue>,
+    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
     pk_column_name: String,
     pk_column_value: SqlValue,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
@@ -297,6 +313,7 @@ impl UpdateParams {
                   &json_schema_registry,
                   column,
                   json.as_ref(),
+                  file_token_decoder,
                   *is_geometry,
                   serde_json::from_str(&text)?,
                   /* allow_file_metadata= */ true,
@@ -367,12 +384,12 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
   accessor: &S,
   multipart_files: Vec<FileUploadRequest>,
   params: &mut Vec<NamedParam>,
+  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
 ) -> Result<FileMetadataAndPayload, ParamsError> {
   let files: Vec<(String, FileUpload, Payload)> = multipart_files
     .into_iter()
     .map(|file| {
-      let (col_name, file_metadata, payload) =
-        file.consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+      let (col_name, file_metadata, payload) = file.consume(file_token_decoder)?;
 
       // TODO: If we require `FileUploadData::name` to be present, maybe we should make it
       // required.
@@ -445,6 +462,7 @@ fn extract_params_and_files_from_json(
   json_schema_registry: &JsonSchemaRegistry,
   col: &Column,
   json_metadata: Option<&JsonColumnMetadata>,
+  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
   #[allow(unused)] is_geometry: bool,
   value: serde_json::Value,
   allow_file_metadata: bool,
@@ -483,7 +501,7 @@ fn extract_params_and_files_from_json(
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
       let (metadata, contents) =
-        extract_param_and_file_from_json_value(value, allow_file_metadata)?;
+        extract_param_and_file_from_json_value(file_token_decoder, allow_file_metadata, value)?;
       let param = Value::Text(serde_json::to_string(&metadata)?);
       return Ok((param, Some(vec![(metadata, contents)])));
     }
@@ -496,7 +514,7 @@ fn extract_params_and_files_from_json(
         .into_iter()
         .map(|value| {
           let (metadata, contents) =
-            extract_param_and_file_from_json_value(value, allow_file_metadata)?;
+            extract_param_and_file_from_json_value(file_token_decoder, allow_file_metadata, value)?;
           return Ok((metadata, contents));
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
@@ -536,8 +554,9 @@ fn extract_params_and_files_from_json(
 }
 
 fn extract_param_and_file_from_json_value(
-  value: serde_json::Value,
+  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
   allow_file_metadata: bool,
+  value: serde_json::Value,
 ) -> Result<(FileUpload, Payload), ParamsError> {
   if allow_file_metadata {
     // We (used to) allow inputs to either be "fresh" inputs containing actual data bytes or metadata
@@ -554,8 +573,7 @@ fn extract_param_and_file_from_json_value(
 
     return match serde_json::from_value::<InputOrMetadata>(value)? {
       InputOrMetadata::Input(file_upload_input) => {
-        let (_col_name, metadata, payload) = file_upload_input
-          .consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+        let (_col_name, metadata, payload) = file_upload_input.consume(file_token_decoder)?;
 
         let Payload::Bytes(contents) = payload else {
           return Err(ParamsError::UnexpectedType(
@@ -573,8 +591,7 @@ fn extract_param_and_file_from_json_value(
     };
   } else {
     let file_upload_input = serde_json::from_value::<FileUploadRequest>(value)?;
-    let (_col_name, metadata, payload) = file_upload_input
-      .consume(|_token| Err(trailbase_schema::json_schema::Error::NotImplemented))?;
+    let (_col_name, metadata, payload) = file_upload_input.consume(file_token_decoder)?;
 
     let Payload::Bytes(contents) = payload else {
       return Err(ParamsError::UnexpectedType(
@@ -718,6 +735,7 @@ mod tests {
           &registry,
           json_row_from_value(value).unwrap(),
           None,
+          &|_| Err(JsonError::NotImplemented),
         )
         .unwrap()
         .0,
@@ -740,6 +758,7 @@ mod tests {
           &registry,
           json_row_from_value(value).unwrap(),
           None,
+          &|_| Err(JsonError::NotImplemented),
         )
         .unwrap()
         .0,
@@ -759,6 +778,7 @@ mod tests {
         &registry,
         json_row_from_value(value.clone()).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
       );
 
       assert!(params.is_err(), "{params:?}");
@@ -780,7 +800,8 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None
+          None,
+          &|_| Err(JsonError::NotImplemented),
         )
         .is_err()
       );
@@ -802,6 +823,7 @@ mod tests {
         &registry,
         json_row_from_value(value).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
       )
       .unwrap()
       .0;
@@ -822,7 +844,8 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None
+          None,
+          &|_| Err(JsonError::NotImplemented),
         )
         .is_err()
       );
@@ -847,6 +870,7 @@ mod tests {
         &registry,
         json_row_from_value(value).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
       )
       .unwrap()
       .0;
@@ -915,6 +939,7 @@ mod tests {
         &registry,
         json_row_from_value(empty).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
         "id".to_string(),
         Value::Integer(id),
       )
@@ -930,6 +955,7 @@ mod tests {
         &registry,
         json_row_from_value(unknown_column).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
         "id".to_string(),
         Value::Integer(id),
       )
@@ -984,6 +1010,7 @@ mod tests {
             ),
           ),
         ]),
+        &|_| Err(JsonError::NotImplemented),
         "id".to_string(),
         SqlValue::Integer(id),
       )
@@ -1018,6 +1045,7 @@ mod tests {
           &registry,
           json_row_from_value(non_admin_value).unwrap(),
           None,
+          &|_| Err(JsonError::NotImplemented),
           "id".to_string(),
           Value::Integer(id),
         )
@@ -1043,6 +1071,7 @@ mod tests {
         &registry,
         json_row_from_value(value_with_new_file).unwrap(),
         None,
+        &|_| Err(JsonError::NotImplemented),
         "id".to_string(),
         Value::Integer(id),
       )

@@ -49,7 +49,7 @@ impl FileUploadRequest {
   /// Returns (name, json, payload (token or bytes)).
   pub fn consume(
     self,
-    token_decoder: impl Fn(&str) -> Result<FileToken, Error>,
+    token_decoder: &impl Fn(&str) -> Result<FileToken, Error>,
   ) -> Result<(Option<String>, FileUpload, Payload), Error> {
     return match self {
       FileUploadRequest::Data(data) => data.consume(),

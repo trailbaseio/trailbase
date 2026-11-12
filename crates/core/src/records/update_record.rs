@@ -1,4 +1,5 @@
 use axum::extract::{Path, State};
+use trailbase_schema::json_schema::Error as JsonError;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
@@ -46,6 +47,7 @@ pub async fn update_record_handler(
     &state.json_schema_registry().load(),
     request,
     multipart_files,
+    &|_| Err(JsonError::NotImplemented),
     api.record_pk_column().column.name.clone(),
     record_id.clone(),
   )
