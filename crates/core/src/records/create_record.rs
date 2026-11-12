@@ -286,6 +286,9 @@ pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String
 
 #[cfg(test)]
 mod tests {
+  use serde_json::json;
+  use trailbase_sqlite::params;
+
   use super::*;
   use crate::app_state::*;
   use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
@@ -293,9 +296,6 @@ mod tests {
   use crate::records::*;
   use crate::test_util::*;
   use crate::util::{id_to_b64, uuid_to_b64};
-
-  use serde_json::json;
-  use trailbase_sqlite::params;
 
   #[tokio::test]
   async fn test_simple_record_api_create() {

@@ -129,14 +129,13 @@ struct CreateOrReplaceRecordQueryTemplate<'a> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-
   use serde_json::json;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::Table;
   use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
   use trailbase_sqlite::Value;
 
+  use super::*;
   use crate::config::proto;
   use crate::records::params::ParamOptions;
   use crate::records::test_utils::json_row_from_value;

@@ -1,11 +1,13 @@
 use axum::extract::{Path, State};
+use trailbase_schema::json_schema::Error as JsonError;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::RecordError;
+use crate::records::file_id::file_token_decrypt;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{JsonRow, ParamOptions, UpdateParams};
+use crate::records::params::{FileTokenDecoder, JsonRow, ParamOptions, UpdateParams};
 use crate::records::queries::UpdateRecordApiQuery;
 
 /// Update existing record.
@@ -41,6 +43,26 @@ pub async fn update_record_handler(
   let record_id = api.primary_key_to_value(record)?;
   let conn = api.conn();
 
+  let file_token_decoder = if api.has_file_columns() {
+    let key = state.file_token_key().clone();
+    let table_name = api.table_name().to_string();
+
+    Some(
+      move |column_name: &str, pk: &trailbase_sqlite::Value, token: &str| {
+        let token =
+          file_token_decrypt(&key, &table_name, token).map_err(|err| JsonError::Other(err))?;
+
+        if token.table_name != table_name || token.column_name != column_name || token.pk != *pk {
+          return Err(JsonError::Other("invalid".into()));
+        }
+
+        return Ok(token);
+      },
+    )
+  } else {
+    None
+  };
+
   let (params, files) = UpdateParams::new(
     &api,
     &state.json_schema_registry().load(),
@@ -48,7 +70,9 @@ pub async fn update_record_handler(
     request,
     ParamOptions {
       multipart_files,
-      file_token_decoder: None,
+      file_token_decoder: file_token_decoder
+        .as_ref()
+        .map(|decoder| decoder as &FileTokenDecoder),
     },
   )
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
