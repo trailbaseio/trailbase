@@ -44,15 +44,14 @@ pub async fn update_record_handler(
   let conn = api.conn();
 
   let file_token_decoder = if api.has_file_columns() {
-    let key = state.file_token_key().clone();
-    let table_name = api.table_name().to_string();
+    let key = *state.file_token_key();
+    let table_name = api.table_name().clone();
 
     Some(
       move |column_name: &str, pk: &trailbase_sqlite::Value, token: &str| {
-        let token =
-          file_token_decrypt(&key, &table_name, token).map_err(|err| JsonError::Other(err))?;
+        let token = file_token_decrypt(&key, &table_name, token).map_err(JsonError::Other)?;
 
-        if token.table_name != table_name || token.column_name != column_name || token.pk != *pk {
+        if token.table_name != *table_name || token.column_name != column_name || token.pk != *pk {
           return Err(JsonError::Other("invalid".into()));
         }
 

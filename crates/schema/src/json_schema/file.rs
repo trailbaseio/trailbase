@@ -4,22 +4,7 @@ use uuid::Uuid;
 
 use crate::json_schema::error::Error;
 
-/// Wire representation of upload requests, which may either contain data or use a token to
-/// represent round-tripped data for update operations.
-#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
-#[cfg_attr(debug_assertions, derive(Serialize))]
-#[serde(untagged)]
-#[schemars(description = "")]
-pub enum FileUploadRequest {
-  /// Input data: metadata + bytes.
-  #[schemars(description = "")]
-  Data(FileUploadData),
-  /// Encoded token representation.
-  #[schemars(description = "")]
-  Token { token: String },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct FileToken {
   /// Name of the table, the file is from.
   pub table_name: String,
@@ -45,11 +30,28 @@ pub enum Payload {
   Id,
 }
 
+pub type FileTokenDecoder<'a> = dyn Fn(&str) -> Result<FileToken, Error> + 'a;
+
+/// Wire representation of upload requests, which may either contain data or use a token to
+/// represent round-tripped data for update operations.
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+#[cfg_attr(debug_assertions, derive(Serialize))]
+#[serde(untagged)]
+#[schemars(description = "")]
+pub enum FileUploadRequest {
+  /// Input data: metadata + bytes.
+  #[schemars(description = "")]
+  Data(FileUploadData),
+  /// Encoded token representation.
+  #[schemars(description = "")]
+  Token { token: String },
+}
+
 impl FileUploadRequest {
   /// Returns (name, json, payload (token or bytes)).
   pub fn consume(
     self,
-    token_decoder: Option<&dyn Fn(&str) -> Result<FileToken, Error>>,
+    token_decoder: Option<&FileTokenDecoder>,
   ) -> Result<(Option<String>, FileUpload, Payload), Error> {
     return match self {
       FileUploadRequest::Data(data) => data.consume(),
@@ -155,7 +157,7 @@ pub struct FileUploadResponse {
 }
 
 /// DB at-rest representation of FileUploads.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
   /// the two use-cases into different representations.

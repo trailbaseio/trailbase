@@ -8,8 +8,8 @@ pub enum Error {
   BuiltinSchema,
   #[error("Missing name")]
   MissingName,
-  #[error("NotImplemented")]
-  NotImplemented,
+  // #[error("NotImplemented")]
+  // NotImplemented,
   #[error("UnexpectedFileToken")]
   UnexpectedFileToken,
   #[error("Other")]
