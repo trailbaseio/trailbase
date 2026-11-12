@@ -6,7 +6,8 @@ use trailbase_schema::db::sqlite::ColumnDataType;
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::json_schema::{
-  Error as JsonError, FileToken, FileUpload, FileUploadRequest, Payload,
+  Error as JsonError, FileToken, FileTokenDecoder as FileTokenDecoderInternal, FileUpload,
+  FileUploadRequest, Payload,
 };
 use trailbase_sqlite::Value;
 use trailbase_sqlite::to_sql::ToSqlProxy;
@@ -520,7 +521,7 @@ fn extract_params_and_files_from_json(
       let (metadata, payload) = extract_param_and_file_from_json_value(
         file_token_decoder
           .as_ref()
-          .map(|decoder| decoder as &dyn Fn(&str) -> Result<FileToken, JsonError>),
+          .map(|decoder| decoder as &FileTokenDecoderInternal),
         allow_file_metadata,
         value,
       )?;
@@ -538,7 +539,7 @@ fn extract_params_and_files_from_json(
           let (metadata, payload) = extract_param_and_file_from_json_value(
             file_token_decoder
               .as_ref()
-              .map(|decoder| decoder as &dyn Fn(&str) -> Result<FileToken, JsonError>),
+              .map(|decoder| decoder as &FileTokenDecoderInternal),
             allow_file_metadata,
             value,
           )?;
@@ -581,7 +582,7 @@ fn extract_params_and_files_from_json(
 }
 
 fn extract_param_and_file_from_json_value(
-  file_token_decoder: Option<&dyn Fn(&str) -> Result<FileToken, JsonError>>,
+  file_token_decoder: Option<&FileTokenDecoderInternal>,
   allow_file_metadata: bool,
   value: serde_json::Value,
 ) -> Result<(FileUpload, Payload), ParamsError> {

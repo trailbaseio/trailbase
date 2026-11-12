@@ -76,7 +76,7 @@ pub async fn update_row_handler(
   let (params, files) = UpdateParams::for_admin_update(
     table_metadata,
     &state.json_schema_registry().load(),
-    (&pk_col, request.primary_key_value),
+    (pk_col, request.primary_key_value),
     request.row,
     ParamOptions {
       multipart_files: None,

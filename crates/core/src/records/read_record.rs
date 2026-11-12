@@ -83,12 +83,12 @@ pub async fn read_record_handler(
     if api.has_file_columns() {
       let table_name = api.table_name().clone();
       let record_id = record_id.clone();
-      let file_token_key = state.file_token_key().clone();
+      let file_token_key = *state.file_token_key();
 
       Some(&move |column_name: &str, metadata: FileUpload| {
         return crate::records::file_id::file_metadata_sanitizer(
           &file_token_key,
-          &table_name.to_string(),
+          &table_name,
           column_name,
           &record_id,
           metadata,
@@ -318,13 +318,16 @@ pub fn test_only_validate_api_json_schema(
 mod tests {
   use axum::extract::{Path, Query, State};
   use base64::prelude::*;
-  use object_store::{ObjectStore, ObjectStoreExt};
+  use object_store::ObjectStoreExt;
+  use serde::Serialize;
   use serde_json::json;
-  use std::io::Read;
-  use std::sync::Arc;
   use trailbase_schema::QualifiedName;
-  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadResponse};
+  use trailbase_schema::db::QualifiedNameEscaped;
+  use trailbase_schema::json_schema::{
+    FileUpload, FileUploadData, FileUploadRequest, FileUploadResponse,
+  };
   use trailbase_sqlite::ConnectionType;
+  use uuid::Uuid;
 
   use super::*;
   use crate::app_state::*;
@@ -336,6 +339,7 @@ mod tests {
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::delete_record::delete_record_handler;
+  use crate::records::file_id::file_token_decrypt;
   use crate::records::files::FileDeletionsDb;
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
@@ -767,6 +771,7 @@ mod tests {
     // Yield to give deletions a change to run async.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
+    // We're checking that the uploads directory is empty.
     let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path())
       .await
       .unwrap();
@@ -786,19 +791,134 @@ mod tests {
     );
   }
 
-  async fn read_objectstore_file(
-    store: &Arc<dyn ObjectStore>,
-    path: &object_store::path::Path,
-  ) -> Vec<u8> {
-    let contents = store.get(&path).await.unwrap();
+  #[tokio::test]
+  async fn test_file_upload_read_and_update() {
+    let state = test_state(None).await.unwrap();
 
-    let object_store::GetResultPayload::File(mut file, _path) = contents.payload else {
-      panic!("expected file");
+    const TABLE_NAME: &str = "test_table";
+    const API_NAME: &str = "test_api";
+    const FILE_COLUMN_NAME: &str = "file";
+    create_test_record_api(&state, API_NAME, Some(TABLE_NAME), None).await;
+
+    let bytes: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
+    let request = json!({
+      FILE_COLUMN_NAME : FileUploadData {
+        name: Some("foo0".to_string()),
+        filename: Some("bar0".to_string()),
+        content_type: Some("baz0".to_string()),
+        data: bytes.clone(),
+      },
+    });
+
+    let create_resp: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(json_row_from_value(request.clone()).unwrap().into()),
+      )
+      .await
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(1, create_resp.ids.len());
+    let id = &create_resp.ids[0];
+
+    let RawJson(read_resp) = read_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), id.clone())),
+      Query(ReadRecordQuery { expand: None }),
+      None,
+    )
+    .await
+    .unwrap();
+
+    let obj = to_object(&read_resp);
+    let file_metadata: FileUploadResponse =
+      serde_json::from_value(obj.get(FILE_COLUMN_NAME).unwrap().clone()).unwrap();
+
+    let Some(encrypted_token) = file_metadata.token.as_ref() else {
+      panic!("missing file token");
     };
 
-    let mut buf = vec![];
-    file.read_to_end(&mut buf).unwrap();
-    return buf;
+    let decrypted_token = file_token_decrypt(
+      state.file_token_key(),
+      &QualifiedNameEscaped::new(&QualifiedName {
+        name: TABLE_NAME.to_string(),
+        database_schema: Some("main".to_string()),
+      }),
+      encrypted_token,
+    )
+    .unwrap();
+
+    // Round-trip the file token and consequently re-read.
+    let _ = update_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), id.clone())),
+      None,
+      Either::Json(
+        json_row_from_value(json!({
+            FILE_COLUMN_NAME: file_metadata,
+            "test 😍": "sentinel",
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    let RawJson(reread_resp) = read_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), id.clone())),
+      Query(ReadRecordQuery { expand: None }),
+      None,
+    )
+    .await
+    .unwrap();
+
+    let obj = to_object(&reread_resp);
+
+    assert_eq!(
+      Some(&serde_json::Value::String("sentinel".into())),
+      obj.get("test 😍")
+    );
+
+    let reread_file: FileUploadResponse =
+      serde_json::from_value(obj.get(FILE_COLUMN_NAME).unwrap().clone()).unwrap();
+
+    assert!(reread_file.token.is_some());
+    let reread_decrypted_token = file_token_decrypt(
+      state.file_token_key(),
+      &QualifiedNameEscaped::new(&QualifiedName {
+        name: TABLE_NAME.to_string(),
+        database_schema: Some("main".to_string()),
+      }),
+      reread_file.token.as_deref().unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(decrypted_token, reread_decrypted_token);
+
+    let read_response = get_uploaded_file_from_record_handler(
+      State(state.clone()),
+      Path((
+        API_NAME.to_string(),
+        id.clone(),
+        FILE_COLUMN_NAME.to_string(),
+      )),
+      None,
+    )
+    .await
+    .unwrap();
+
+    let body = axum::body::to_bytes(read_response.into_body(), usize::MAX)
+      .await
+      .unwrap();
+    assert_eq!(body.to_vec(), bytes);
   }
 
   #[tokio::test]
@@ -807,34 +927,50 @@ mod tests {
 
     const API_NAME: &str = "test_api";
     const TABLE_NAME: &str = "test_table";
+
     create_test_record_api(&state, API_NAME, Some(TABLE_NAME), None).await;
 
-    let bytes0: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
-    let bytes1: Vec<u8> = vec![0, 1, 1, 2];
-    let bytes2: Vec<u8> = vec![42, 5, 42, 5];
+    let file0 = FileUploadData {
+      name: Some("foo0".to_string()),
+      filename: Some("bar0".to_string()),
+      content_type: Some("baz0".to_string()),
+      data: vec![0, 1, 2, 3, 4, 5],
+    };
 
-    let request = json!({
-      "file" : FileUploadData {
-        name: Some("foo0".to_string()),
-        filename: Some("bar0".to_string()),
-        content_type: Some("baz0".to_string()),
-        data: bytes0.clone(),
-      },
-      "files": vec![
-          FileUploadData {
-            name: Some("foo1".to_string()),
-            filename: Some("bar1".to_string()),
-            content_type: Some("baz1".to_string()),
-            data: bytes1.clone(),
-          },
-          FileUploadData {
-            name: Some("foo2".to_string()),
-            filename: Some("bar2".to_string()),
-            content_type: Some("baz2".to_string()),
-            data: bytes2.clone(),
-          },
+    let file1 = FileUploadData {
+      name: Some("foo1".to_string()),
+      filename: Some("bar1".to_string()),
+      content_type: Some("baz1".to_string()),
+      data: vec![0, 1, 1, 2],
+    };
+
+    let file2 = FileUploadData {
+      name: Some("foo2".to_string()),
+      filename: Some("bar2".to_string()),
+      content_type: Some("baz2".to_string()),
+      data: vec![42, 5, 42, 5],
+    };
+
+    #[derive(Serialize)]
+    struct PartialRequestSchema {
+      file: FileUploadRequest,
+      files: Vec<FileUploadRequest>,
+    }
+
+    #[derive(Deserialize)]
+    struct PartialResponseSchema {
+      file: FileUploadResponse,
+      files: Vec<FileUploadResponse>,
+    }
+
+    let request = serde_json::to_value(&PartialRequestSchema {
+      file: FileUploadRequest::Data(file0.clone()),
+      files: vec![
+        FileUploadRequest::Data(file1.clone()),
+        FileUploadRequest::Data(file2.clone()),
       ],
-    });
+    })
+    .unwrap();
 
     let resp0: CreateRecordResponse = unpack_json_response(
       create_record_handler(
@@ -851,8 +987,10 @@ mod tests {
     .unwrap();
 
     let conn = state.conn().clone();
-    let assert_all_files_contents = async |record_id: String| -> Vec<object_store::path::Path> {
-      let record_uuid = BASE64_URL_SAFE.decode(&record_id).unwrap();
+
+    // Checks the contents of all 3 files for the given record id and returns the file id.
+    let assert_all_files_contents = async |record_id: &str| -> Vec<Uuid> {
+      let record_uuid = BASE64_URL_SAFE.decode(record_id).unwrap();
 
       // NOTE: We cannot use `read_record_handler` here because we're striping the object-store uuid
       // from the public response.
@@ -875,18 +1013,18 @@ mod tests {
         expected: &[u8],
         f: &FileUpload,
         read: impl AsyncFnOnce() -> Response,
-      ) -> object_store::path::Path {
+      ) -> Uuid {
+        // Check metadata:
         assert_eq!(f.original_filename(), Some(format!("bar{index}").as_str()));
         assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
 
         let uuid = f.objectstore_id();
         assert_eq!(4, uuid.get_version_num(), "invalid file/object uuid");
-        let file_path = object_store::path::Path::from(uuid.to_string());
-        assert_eq!(
-          *expected,
-          read_objectstore_file(state.objectstore(), &file_path).await
-        );
 
+        // Make sure it file exists in objectstore and on file-system.
+        assert!(check_file_with_id_exists(&state, uuid).await);
+
+        // Check file contents:
         let response = read().await;
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
           .await
@@ -894,26 +1032,32 @@ mod tests {
 
         assert_eq!(*expected, body);
 
-        return file_path;
+        return uuid.clone();
       }
 
       return vec![
-        assert_file(&state, 0, &bytes0, &file, async || {
+        // First file, i.e. `file`.
+        assert_file(&state, 0, &file0.data, &file, async || {
           return get_uploaded_file_from_record_handler(
             State(state.clone()),
-            Path((API_NAME.to_string(), record_id.clone(), "file".to_string())),
+            Path((
+              API_NAME.to_string(),
+              record_id.to_string(),
+              "file".to_string(),
+            )),
             None,
           )
           .await
           .unwrap();
         })
         .await,
-        assert_file(&state, 1, &bytes1, &files[0], async || {
+        // Second file, i.e. `files[0]`.
+        assert_file(&state, 1, &file1.data, &files[0], async || {
           return get_uploaded_files_from_record_handler(
             State(state.clone()),
             Path((
               API_NAME.to_string(),
-              record_id.clone(),
+              record_id.to_string(),
               "files".to_string(),
               files[0].filename().to_string(),
             )),
@@ -923,12 +1067,13 @@ mod tests {
           .unwrap();
         })
         .await,
-        assert_file(&state, 2, &bytes2, &files[1], async || {
+        // Third file, i.e. `files[1]`.
+        assert_file(&state, 2, &file2.data, &files[1], async || {
           return get_uploaded_files_from_record_handler(
             State(state.clone()),
             Path((
               API_NAME.to_string(),
-              record_id.clone(),
+              record_id.to_string(),
               "files".to_string(),
               files[1].filename().to_string(),
             )),
@@ -941,9 +1086,23 @@ mod tests {
       ];
     };
 
-    let paths0 = assert_all_files_contents(resp0.ids[0].clone()).await;
+    let record0_file_ids = assert_all_files_contents(&resp0.ids[0]).await;
 
-    // Insert two more records to check bulk creation.
+    let RawJson(read_resp0) = read_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), resp0.ids[0].clone())),
+      Query(ReadRecordQuery { expand: None }),
+      None,
+    )
+    .await
+    .unwrap();
+
+    let read_resp0: PartialResponseSchema = serde_json::from_str(read_resp0.get()).unwrap();
+    assert!(read_resp0.file.token.is_some());
+    assert!(read_resp0.files[0].token.is_some());
+    assert!(read_resp0.files[1].token.is_some());
+
+    // Bulk insert: Insert two more records to check bulk creation.
     let resp1: CreateRecordResponse = unpack_json_response(
       create_record_handler(
         State(state.clone()),
@@ -961,8 +1120,8 @@ mod tests {
     .await
     .unwrap();
 
-    let paths1_0 = assert_all_files_contents(resp1.ids[0].clone()).await;
-    let paths1_1 = assert_all_files_contents(resp1.ids[1].clone()).await;
+    let record1_file_ids = assert_all_files_contents(&resp1.ids[0]).await;
+    let record2_file_ids = assert_all_files_contents(&resp1.ids[1]).await;
 
     for id in resp1.ids {
       let _ = delete_record_handler(State(state.clone()), Path((API_NAME.to_string(), id)), None)
@@ -975,7 +1134,21 @@ mod tests {
       State(state.clone()),
       Path((API_NAME.to_string(), resp0.ids[0].clone())),
       None,
-      Either::Json(json_row_from_value(request.clone()).unwrap().into()),
+      Either::Json(
+        json_row_from_value(
+          serde_json::to_value(&PartialRequestSchema {
+            // NOTE: We're overriding file1 with the same but fresh data, skipping file1 and
+            // round-tripping file2's token.
+            file: FileUploadRequest::Data(file1.clone()),
+            files: vec![FileUploadRequest::Token {
+              token: read_resp0.files[1].token.clone().unwrap(),
+            }],
+          })
+          .unwrap(),
+        )
+        .unwrap()
+        .into(),
+      ),
     )
     .await
     .unwrap();
@@ -1001,19 +1174,43 @@ mod tests {
       .collect::<Result<Vec<_>, _>>()
       .unwrap();
 
+    // Ok, all pending deletions have been processed:
     assert_eq!(0, pending_deletions.len(), "{pending_deletions:?}");
 
-    // And the actual files are gone.
-    for paths in [paths0, paths1_0, paths1_1] {
-      for path in paths {
-        if !matches!(
-          state.objectstore().get(&path).await,
-          Err(object_store::Error::NotFound { .. })
-        ) {
-          panic!("{path} should have been deleted");
-        }
+    // Check that the deleted files are actually gone, both in the store and on the fs.
+    assert!(!check_file_with_id_exists(&state, &record0_file_ids[0]).await);
+    assert!(!check_file_with_id_exists(&state, &record0_file_ids[1]).await);
+
+    assert!(!check_file_with_id_exists(&state, &record1_file_ids[0]).await);
+    assert!(!check_file_with_id_exists(&state, &record1_file_ids[1]).await);
+    assert!(!check_file_with_id_exists(&state, &record1_file_ids[2]).await);
+
+    assert!(!check_file_with_id_exists(&state, &record2_file_ids[0]).await);
+    assert!(!check_file_with_id_exists(&state, &record2_file_ids[1]).await);
+    assert!(!check_file_with_id_exists(&state, &record2_file_ids[2]).await);
+
+    // Check that file2 still exists after their token being round-tripped in update
+    // above.
+    assert!(check_file_with_id_exists(&state, &record0_file_ids[2]).await);
+  }
+
+  async fn check_file_with_id_exists(state: &AppState, objectstore_id: &uuid::Uuid) -> bool {
+    let path = objectstore_id.to_string();
+    let exists_in_store = match state
+      .objectstore()
+      .get(&object_store::path::Path::from(path.clone()))
+      .await
+    {
+      Ok(_) => true,
+      Err(object_store::Error::NotFound { .. }) => false,
+      Err(err) => {
+        panic!("unexpedted objectore error: {err}");
       }
-    }
+    };
+
+    let exists_on_fs = std::fs::exists(state.data_dir().uploads_path().join(&path)).unwrap();
+
+    return exists_in_store && exists_on_fs;
   }
 
   #[tokio::test]

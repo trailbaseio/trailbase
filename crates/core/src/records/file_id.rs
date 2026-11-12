@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use jsonwebtoken::jwk::{AlgorithmParameters, Jwk, OctetKeyParameters, OctetKeyType};
+use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::{FileToken, FileUpload, FileUploadResponse};
 
 use crate::InitError;
@@ -46,9 +47,29 @@ pub(crate) fn get_or_init_aes256_file_key(data_dir: &DataDir) -> Result<KeyType,
   return aes256_from_jwk(&contents);
 }
 
+/// Takes the FileMetadata during reads and builds an opaque encrypted token and converts everything
+/// into a FileUploadResponse.
+pub fn file_metadata_sanitizer(
+  key: &KeyType,
+  table_name: &QualifiedNameEscaped,
+  column_name: &str,
+  pk: &trailbase_sqlite::Value,
+  metadata: FileUpload,
+) -> Result<trailbase_schema::json::Value<'static>, Box<dyn std::error::Error + Sync + Send>> {
+  return Ok(trailbase_schema::json::Value::Raw(
+    serde_json::value::to_raw_value(&file_metadata_sanitizer_impl(
+      key,
+      table_name,
+      column_name,
+      pk,
+      metadata,
+    )?)?,
+  ));
+}
+
 fn file_metadata_sanitizer_impl(
   key: &KeyType,
-  table_name: &str,
+  table_name: &QualifiedNameEscaped,
   column_name: &str,
   pk: &trailbase_sqlite::Value,
   metadata: FileUpload,
@@ -69,29 +90,9 @@ fn file_metadata_sanitizer_impl(
   });
 }
 
-/// Takes the FileMetadata during reads and builds an opaque encrypted token and converts everything
-/// into a FileUploadResponse.
-pub fn file_metadata_sanitizer(
-  key: &KeyType,
-  table_name: &str,
-  column_name: &str,
-  pk: &trailbase_sqlite::Value,
-  metadata: FileUpload,
-) -> Result<trailbase_schema::json::Value<'static>, Box<dyn std::error::Error + Sync + Send>> {
-  return Ok(trailbase_schema::json::Value::Raw(
-    serde_json::value::to_raw_value(&file_metadata_sanitizer_impl(
-      key,
-      table_name,
-      column_name,
-      pk,
-      metadata,
-    )?)?,
-  ));
-}
-
 pub fn file_token_decrypt(
   key: &KeyType,
-  table_name: &str,
+  table_name: &QualifiedNameEscaped,
   token: &str,
 ) -> Result<FileToken, Box<dyn std::error::Error + Sync + Send>> {
   let json = decrypt(

@@ -52,7 +52,7 @@ pub fn decrypt(
   let (nonce, msg) = cipher_text.split_at(NONCE_LEN);
   let nonce: &Nonce = nonce.as_array::<NONCE_LEN>().ok_or("invalid nonce")?.into();
 
-  // NOTE: We're not using the in-place variants like for encyrption, which results in more
+  // NOTE: We're not using the in-place variants like for encryption, which results in more
   // allocations.
   let cipher = Cipher::new(key);
   return cipher
@@ -63,7 +63,11 @@ pub fn decrypt(
         aad: associated_data,
       },
     )
-    .map_err(|_| "invalid key/nonce/value: bad seal");
+    .map_err(|err| {
+      log::warn!("decryption failed: {err}");
+
+      return "invalid key/nonce/value: bad seal";
+    });
 }
 
 pub fn generate_random_key() -> KeyType {
