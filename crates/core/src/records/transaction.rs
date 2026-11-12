@@ -151,6 +151,7 @@ pub async fn record_transactions_handler(
             extract_record(value)?,
             ParamOptions {
               multipart_files: None,
+              // FIXME: pass decoder.
               file_token_decoder: None,
             },
           )
@@ -353,9 +354,8 @@ pub(crate) fn apply_ops(
 
 #[cfg(test)]
 mod tests {
-  use std::assert_matches;
-
   use serde_json::json;
+  use std::assert_matches;
 
   use super::*;
   use crate::app_state::*;

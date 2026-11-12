@@ -26,12 +26,20 @@ pub(crate) type FileMetadataAndPayload = Vec<(FileUpload, Payload)>;
 /// A JSON object representing a DB record/row.
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
+pub type FileTokenDecoder = dyn Fn(
+  /* column_name */ &str,
+  /* pk= */ &Value,
+  /* token= */ &str,
+) -> Result<FileToken, JsonError>;
+
 pub struct ParamOptions<'a> {
   /// Additional file inputs not passed as JSON but rather as multipart form.
   pub multipart_files: Option<Vec<FileUploadRequest>>,
-  /// Used to decode file-tokens, only needed for updates or upserts to round-trip references to
-  /// existing FileUploads.
-  pub file_token_decoder: Option<&'a dyn Fn(&str) -> Result<FileToken, JsonError>>,
+  /// Used to decode file-tokens, only needed for updates to round-trip references to existing
+  /// FileUploads (Inserts and upserts don't have a PK to validate against the token). Passing
+  /// `None` means that any file tokens encountered, will fail the (Insert|Update)Param
+  /// construction.
+  pub file_token_decoder: Option<&'a FileTokenDecoder>,
 }
 
 #[derive(Debug)]
@@ -76,6 +84,13 @@ impl InsertParams {
     row: JsonRow,
     opts: ParamOptions,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
+    if opts.file_token_decoder.is_some() {
+      // If we run into this, this is an internal error, i.e. things are wired up incorrectly.
+      return Err(ParamsError::FileMetadataSanitizer(
+        "insert cannot safely support file tokens with record id unknown".into(),
+      ));
+    }
+
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataAndPayload = vec![];
 
@@ -91,7 +106,7 @@ impl InsertParams {
         column_metadata,
         json_schema_registry,
         value,
-        &opts,
+        /* file_token_decoder */ None,
         /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
@@ -113,10 +128,11 @@ impl InsertParams {
       files.extend(extract_files_from_multipart(
         column_accessor,
         multipart_files,
-        opts.file_token_decoder,
         &mut params,
       )?);
     }
+
+    // Finally validate all file tokens both from multipart as well as json
 
     return Ok((Self { params }, files));
   }
@@ -212,7 +228,9 @@ impl UpdateParams {
         column_metadata,
         json_schema_registry,
         value,
-        &opts,
+        opts
+          .file_token_decoder
+          .map(|decoder| (&pk_column_value, decoder)),
         /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
@@ -246,10 +264,11 @@ impl UpdateParams {
       files.extend(extract_files_from_multipart(
         column_accessor,
         multipart_files,
-        opts.file_token_decoder,
         &mut params,
       )?);
     }
+
+    // After collecting all files (multipart + Json) validate tokens.
 
     return Ok((
       Self {
@@ -270,7 +289,9 @@ impl UpdateParams {
     row: indexmap::IndexMap<String, SqlValue>,
     opts: ParamOptions,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
-    let pk_column_param = pk_column_value.try_into()?;
+    // TODO: We should push the SqlValue -> trailbase_sqlite::Value conversion up to the handler,
+    // both for the `row` and the PK value.
+    let pk_column_param: Value = pk_column_value.try_into()?;
 
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataAndPayload = vec![];
@@ -292,7 +313,9 @@ impl UpdateParams {
                     column_metadata,
                     json_schema_registry,
                     serde_json::from_str(&text)?,
-                    &opts,
+                    opts
+                      .file_token_decoder
+                      .map(|decoder| (&pk_column_param, decoder)),
                     /* allow_file_metadata= */ true,
                   )?;
                   if let Some(json_files) = json_files {
@@ -360,13 +383,16 @@ pub enum Params<'a> {
 fn extract_files_from_multipart<S: ColumnAccessor>(
   column_accessor: &S,
   multipart_files: Vec<FileUploadRequest>,
-  file_token_decoder: Option<&dyn Fn(&str) -> Result<FileToken, JsonError>>,
   params: &mut Vec<NamedParam>,
 ) -> Result<FileMetadataAndPayload, ParamsError> {
   let files: Vec<(String, FileUpload, Payload)> = multipart_files
     .into_iter()
     .map(|file| {
-      let (col_name, file_metadata, payload) = file.consume(file_token_decoder)?;
+      // NOTE: We don't currently support file tokens for multipart inputs. We certainly could if we
+      // changed the APIs a little, however it's unclear if this would supports a common use-case,
+      // i.e. this would matter if you had SSR that prepared a form input with tokens to avoid
+      // client-side logic.
+      let (col_name, file_metadata, payload) = file.consume(None)?;
 
       // TODO: If we require `FileUploadData::name` to be present, maybe we should make it
       // required.
@@ -375,6 +401,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           "Multipart form upload missing name property",
         ));
       };
+
       return Ok((col_name, file_metadata, payload));
     })
     .collect::<Result<_, ParamsError>>()?;
@@ -439,7 +466,7 @@ fn extract_params_and_files_from_json(
   column_metadata: &ColumnMetadata,
   json_schema_registry: &JsonSchemaRegistry,
   value: serde_json::Value,
-  opts: &ParamOptions,
+  file_token_decoder: Option<(/* pk= */ &Value, &FileTokenDecoder)>,
   allow_file_metadata: bool,
 ) -> Result<(Value, Option<FileMetadataAndPayload>), ParamsError> {
   let ColumnMetadata {
@@ -448,6 +475,14 @@ fn extract_params_and_files_from_json(
     is_geometry,
     ..
   } = column_metadata;
+
+  let file_token_decoder = if let Some((pk, decoder)) = &file_token_decoder {
+    Some(|token: &str| {
+      return decoder(&column_metadata.column.name, pk, token);
+    })
+  } else {
+    None
+  };
 
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json else {
@@ -482,13 +517,15 @@ fn extract_params_and_files_from_json(
   // Handle file columns specially, i.e. convert the JSON.
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-      let (metadata, contents) = extract_param_and_file_from_json_value(
-        opts.file_token_decoder,
+      let (metadata, payload) = extract_param_and_file_from_json_value(
+        file_token_decoder
+          .as_ref()
+          .map(|decoder| decoder as &dyn Fn(&str) -> Result<FileToken, JsonError>),
         allow_file_metadata,
         value,
       )?;
       let param = Value::Text(serde_json::to_string(&metadata)?);
-      return Ok((param, Some(vec![(metadata, contents)])));
+      return Ok((param, Some(vec![(metadata, payload)])));
     }
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
       let serde_json::Value::Array(array) = value else {
@@ -498,12 +535,14 @@ fn extract_params_and_files_from_json(
       let uploads: FileMetadataAndPayload = array
         .into_iter()
         .map(|value| {
-          let (metadata, contents) = extract_param_and_file_from_json_value(
-            opts.file_token_decoder,
+          let (metadata, payload) = extract_param_and_file_from_json_value(
+            file_token_decoder
+              .as_ref()
+              .map(|decoder| decoder as &dyn Fn(&str) -> Result<FileToken, JsonError>),
             allow_file_metadata,
             value,
           )?;
-          return Ok((metadata, contents));
+          return Ok((metadata, payload));
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
 
@@ -546,7 +585,7 @@ fn extract_param_and_file_from_json_value(
   allow_file_metadata: bool,
   value: serde_json::Value,
 ) -> Result<(FileUpload, Payload), ParamsError> {
-  if allow_file_metadata {
+  return if allow_file_metadata {
     // We (used to) allow inputs to either be "fresh" inputs containing actual data bytes or metadata
     // round-tripped from prior reads (where the data is already stored). The latter is useful for
     // updates and partial deletions. We currently only allow it for admin APIs.
@@ -559,37 +598,22 @@ fn extract_param_and_file_from_json_value(
       Metadata(FileUpload),
     }
 
-    return match serde_json::from_value::<InputOrMetadata>(value)? {
+    match serde_json::from_value::<InputOrMetadata>(value)? {
       InputOrMetadata::Input(file_upload_input) => {
         let (_col_name, metadata, payload) = file_upload_input.consume(file_token_decoder)?;
-
-        let Payload::Bytes(contents) = payload else {
-          return Err(ParamsError::UnexpectedType(
-            "token",
-            "Only payload supported thus far".to_string(),
-          ));
-        };
-
-        Ok((metadata, Payload::Bytes(contents)))
+        Ok((metadata, payload))
       }
       InputOrMetadata::Metadata(metadata) => {
-        // FIXME: We should use token instead.
+        // FIXME: We should use file tokens instead.
         Ok((metadata, Payload::Id))
       }
-    };
+    }
   } else {
     let file_upload_input = serde_json::from_value::<FileUploadRequest>(value)?;
     let (_col_name, metadata, payload) = file_upload_input.consume(file_token_decoder)?;
 
-    let Payload::Bytes(contents) = payload else {
-      return Err(ParamsError::UnexpectedType(
-        "token",
-        "Only payload supported thus far".to_string(),
-      ));
-    };
-
-    Ok((metadata, Payload::Bytes(contents)))
-  }
+    Ok((metadata, payload))
+  };
 }
 
 pub trait ColumnAccessor {

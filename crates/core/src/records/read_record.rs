@@ -83,13 +83,11 @@ pub async fn read_record_handler(
     if api.has_file_columns() {
       let table_name = api.table_name().clone();
       let record_id = record_id.clone();
+      let file_token_key = state.file_token_key().clone();
 
       Some(&move |column_name: &str, metadata: FileUpload| {
-        // FIXME: wire up a stable, dedicated key.
-        let key = crate::aes::generate_random_key();
-
         return crate::records::file_id::file_metadata_sanitizer(
-          &key,
+          &file_token_key,
           &table_name.to_string(),
           column_name,
           &record_id,
