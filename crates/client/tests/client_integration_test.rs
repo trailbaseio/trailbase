@@ -864,29 +864,35 @@ async fn subscription_ws_test() {
   }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct FileUpload {
-  /// The file's UUID, should be stripped.
-  id: Option<String>,
-
-  /// The file's original filename
-  original_filename: Option<String>,
-
-  /// The file's unique filename.
-  filename: Option<String>,
-
-  /// The file's user-provided content type.
-  content_type: Option<String>,
-
-  /// The file's inferred mime type. Not user provided.
-  mime_type: Option<String>,
+#[derive(Debug, Clone, Serialize)]
+pub enum FileUploadRequest {
+  Data(FileUploadData),
+  Token { token: String },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct FileUploadTable {
+#[derive(Debug, Clone, Serialize)]
+pub struct FileUploadData {
+  pub name: Option<String>,
+  pub filename: Option<String>,
+  pub content_type: Option<String>,
+  pub data: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileUploadResponse {
+  pub token: Option<String>,
+  pub original_filename: Option<String>,
+  pub filename: String,
+  pub content_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FileUploadTableResponse {
+  #[allow(unused)]
   name: Option<String>,
-  single_file: Option<FileUpload>,
-  multiple_files: Vec<FileUpload>,
+  single_file: Option<FileUploadResponse>,
+  multiple_files: Vec<FileUploadResponse>,
 }
 
 async fn file_upload_json_base64_test() {
@@ -901,11 +907,11 @@ async fn file_upload_json_base64_test() {
   let record_id = api
     .create(json!({
       "name": "Base64 File Upload Test",
-      "single_file": {
-        "name": "single_test",
-        "filename": "test1.bin",
-        "content_type": "application/octet-stream",
-        "data": BASE64_URL_SAFE.encode(&test_bytes1)
+      "single_file": &FileUploadData {
+        name: Some("single_test".to_string()),
+        filename: Some("test1.bin".to_string()),
+        content_type: Some("application/octet-stream".to_string()),
+        data: BASE64_URL_SAFE.encode(&test_bytes1)
       },
       "multiple_files": [
         {
@@ -926,11 +932,10 @@ async fn file_upload_json_base64_test() {
     .unwrap();
 
   // Read the record back to verify file metadata was stored correctly
-  let record: FileUploadTable = api.read(&record_id).await.unwrap();
+  let record: FileUploadTableResponse = api.read(&record_id).await.unwrap();
 
   // Verify single file metadata
   let single_file = record.single_file.as_ref().unwrap();
-  assert_eq!(None, single_file.id);
   assert_eq!(single_file.original_filename.as_deref(), Some("test1.bin"));
   assert_eq!(
     single_file.content_type.as_deref(),
@@ -952,7 +957,7 @@ async fn file_upload_json_base64_test() {
   let http_client = reqwest::Client::new();
 
   // Test file download endpoints to verify actual file content
-  let single_file_fname = single_file.filename.as_deref().unwrap();
+  let single_file_fname = &single_file.filename;
   for single_file_url in [
     format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/file/single_file",
@@ -977,7 +982,7 @@ async fn file_upload_json_base64_test() {
     .get(&format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{filename}",
       site = site(),
-      filename = multiple_files[0].filename.as_ref().unwrap()
+      filename = &multiple_files[0].filename,
     ))
     .send()
     .await
@@ -989,7 +994,7 @@ async fn file_upload_json_base64_test() {
     .get(&format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{filename}",
       site = site(),
-      filename = multiple_files[1].filename.as_ref().unwrap(),
+      filename = &multiple_files[1].filename,
     ))
     .send()
     .await
