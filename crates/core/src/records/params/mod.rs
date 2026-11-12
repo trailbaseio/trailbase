@@ -1,9 +1,8 @@
 use compact_str::CompactString;
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::sync::Arc;
 use trailbase_schema::db::metadata::ColumnMetadata;
-use trailbase_schema::db::sqlite::{Column, ColumnDataType};
+use trailbase_schema::db::sqlite::ColumnDataType;
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::json_schema::{
@@ -26,6 +25,14 @@ pub(crate) type FileMetadataAndPayload = Vec<(FileUpload, Payload)>;
 
 /// A JSON object representing a DB record/row.
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
+
+pub struct ParamOptions<'a> {
+  /// Additional file inputs not passed as JSON but rather as multipart form.
+  pub multipart_files: Option<Vec<FileUploadRequest>>,
+  /// Used to decode file-tokens, only needed for updates or upserts to round-trip references to
+  /// existing FileUploads.
+  pub file_token_decoder: Option<&'a dyn Fn(&str) -> Result<FileToken, JsonError>>,
+}
 
 #[derive(Debug)]
 pub struct NamedParam {
@@ -64,11 +71,10 @@ impl<'a> trailbase_sqlite::Params for InsertParamsRef<'a> {
 impl InsertParams {
   /// Build SQL InsertParams from JSON inputs (including files).
   pub fn new<S: ColumnAccessor>(
-    accessor: &S,
+    column_accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
-    multipart_files: Option<Vec<FileUploadRequest>>,
-    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
+    opts: ParamOptions,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataAndPayload = vec![];
@@ -77,24 +83,15 @@ impl InsertParams {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or client version
       // skew. This is similar in spirit to protobuf's unknown fields behavior.
-      let Some(ColumnMetadata {
-        index,
-        column,
-        json,
-        is_geometry,
-        ..
-      }) = accessor.column_by_name(&key)
-      else {
+      let Some(column_metadata) = column_accessor.column_by_name(&key) else {
         continue;
       };
 
       let (param, json_files) = extract_params_and_files_from_json(
+        column_metadata,
         json_schema_registry,
-        column,
-        json.as_ref(),
-        file_token_decoder,
-        *is_geometry,
         value,
+        &opts,
         /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
@@ -104,7 +101,7 @@ impl InsertParams {
       }
 
       params.push(NamedParam {
-        column_index: *index,
+        column_index: column_metadata.index,
         placeholder: named_placeholder(&key),
         column_name: key.into(),
         value: param,
@@ -112,12 +109,12 @@ impl InsertParams {
     }
 
     // Note: files provided as part of a JSON request are handled above.
-    if let Some(multipart_files) = multipart_files {
+    if let Some(multipart_files) = opts.multipart_files {
       files.extend(extract_files_from_multipart(
-        accessor,
+        column_accessor,
         multipart_files,
+        opts.file_token_decoder,
         &mut params,
-        file_token_decoder,
       )?);
     }
 
@@ -130,7 +127,7 @@ impl InsertParams {
   /// TODO: Admin insertions currently don't support files. This is something that would have to
   /// change if we wanted to allow this in the UI.
   pub fn for_admin_insert<S: ColumnAccessor>(
-    accessor: &S,
+    column_accessor: &S,
     row: indexmap::IndexMap<String, SqlValue>,
   ) -> Result<Self, ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
@@ -138,7 +135,7 @@ impl InsertParams {
     // Insert parameters case.
     for (key, value) in row {
       // For admin operations we don't skip. There should not be client version skew.
-      let Some(ColumnMetadata { index, .. }) = accessor.column_by_name(&key) else {
+      let Some(ColumnMetadata { index, .. }) = column_accessor.column_by_name(&key) else {
         return Err(ParamsError::ColumnNotFound);
       };
 
@@ -194,13 +191,11 @@ impl<'a> trailbase_sqlite::Params for UpdateParamsRef<'a> {
 impl UpdateParams {
   /// Build SQL UpdateParams from JSON inputs (including files).
   pub fn new<S: ColumnAccessor>(
-    accessor: &S,
+    column_accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
+    (pk_column_name, pk_column_value): (&str, Value),
     row: JsonRow,
-    multipart_files: Option<Vec<FileUploadRequest>>,
-    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
-    pk_column_name: String,
-    pk_column_value: Value,
+    opts: ParamOptions,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataAndPayload = vec![];
@@ -209,24 +204,15 @@ impl UpdateParams {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or client version
       // skew. This is similar in spirit to protobuf's unknown fields behavior.
-      let Some(ColumnMetadata {
-        index,
-        column,
-        json,
-        is_geometry,
-        ..
-      }) = accessor.column_by_name(&key)
-      else {
+      let Some(column_metadata) = column_accessor.column_by_name(&key) else {
         continue;
       };
 
       let (param, json_files) = extract_params_and_files_from_json(
+        column_metadata,
         json_schema_registry,
-        column,
-        json.as_ref(),
-        file_token_decoder,
-        *is_geometry,
         value,
+        &opts,
         /* allow_file_metadata= */ false,
       )?;
       if let Some(json_files) = json_files {
@@ -242,7 +228,7 @@ impl UpdateParams {
       }
 
       params.push(NamedParam {
-        column_index: *index,
+        column_index: column_metadata.index,
         placeholder: named_placeholder(&key),
         column_name: key.into(),
         value: param,
@@ -256,19 +242,19 @@ impl UpdateParams {
     }
 
     // Note: files provided as part of a JSON request are handled above.
-    if let Some(multipart_files) = multipart_files {
+    if let Some(multipart_files) = opts.multipart_files {
       files.extend(extract_files_from_multipart(
-        accessor,
+        column_accessor,
         multipart_files,
+        opts.file_token_decoder,
         &mut params,
-        file_token_decoder,
       )?);
     }
 
     return Ok((
       Self {
         params,
-        pk_column_name,
+        pk_column_name: pk_column_name.to_string(),
         pk_column_value,
       },
       files,
@@ -278,12 +264,11 @@ impl UpdateParams {
   /// Construct update params for admin's update-row APIs. Unlike the record API ones, this
   /// expects SqlValue's rather than JSON.
   pub fn for_admin_update<S: ColumnAccessor>(
-    accessor: &S,
-    json_schema_registry: Arc<JsonSchemaRegistry>,
+    column_accessor: &S,
+    json_schema_registry: &JsonSchemaRegistry,
+    (pk_column_name, pk_column_value): (&str, SqlValue),
     row: indexmap::IndexMap<String, SqlValue>,
-    file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
-    pk_column_name: String,
-    pk_column_value: SqlValue,
+    opts: ParamOptions,
   ) -> Result<(Self, FileMetadataAndPayload), ParamsError> {
     let pk_column_param = pk_column_value.try_into()?;
 
@@ -293,51 +278,43 @@ impl UpdateParams {
     // Update parameters case.
     for (key, value) in row {
       // For admin operations we don't skip. There should not be client version skew.
-      let Some(ColumnMetadata {
-        index,
-        column,
-        json,
-        is_geometry,
-        ..
-      }) = accessor.column_by_name(&key)
-      else {
+      let Some(column_metadata) = column_accessor.column_by_name(&key) else {
         return Err(ParamsError::ColumnNotFound);
       };
 
-      let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
-        match schema_name.as_str() {
-          "std.FileUpload" | "std.FileUploads" => {
-            match value {
-              SqlValue::Text(text) => {
-                let (param, json_files) = extract_params_and_files_from_json(
-                  &json_schema_registry,
-                  column,
-                  json.as_ref(),
-                  file_token_decoder,
-                  *is_geometry,
-                  serde_json::from_str(&text)?,
-                  /* allow_file_metadata= */ true,
-                )?;
-                if let Some(json_files) = json_files {
-                  // Note: files provided as a multipart form upload are handled below. They need
-                  // more special handling to establish the field.name to column
-                  // mapping.
-                  files.extend(json_files);
-                }
+      let param: Value =
+        if let Some(JsonColumnMetadata::SchemaName(schema_name)) = column_metadata.json.as_ref() {
+          match schema_name.as_str() {
+            "std.FileUpload" | "std.FileUploads" => {
+              match value {
+                SqlValue::Text(text) => {
+                  let (param, json_files) = extract_params_and_files_from_json(
+                    column_metadata,
+                    json_schema_registry,
+                    serde_json::from_str(&text)?,
+                    &opts,
+                    /* allow_file_metadata= */ true,
+                  )?;
+                  if let Some(json_files) = json_files {
+                    // Note: files provided as a multipart form upload are handled below. They need
+                    // more special handling to establish the field.name to column
+                    // mapping.
+                    files.extend(json_files);
+                  }
 
-                param
-              }
-              SqlValue::Null => Value::Null,
-              _ => {
-                return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
+                  param
+                }
+                SqlValue::Null => Value::Null,
+                _ => {
+                  return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
+                }
               }
             }
+            _ => value.try_into()?,
           }
-          _ => value.try_into()?,
-        }
-      } else {
-        value.try_into()?
-      };
+        } else {
+          value.try_into()?
+        };
 
       if key == pk_column_name && pk_column_param != param {
         return Err(ParamsError::Column(
@@ -346,7 +323,7 @@ impl UpdateParams {
       }
 
       params.push(NamedParam {
-        column_index: *index,
+        column_index: column_metadata.index,
         placeholder: named_placeholder(&key),
         column_name: key.into(),
         value: param,
@@ -362,7 +339,7 @@ impl UpdateParams {
     return Ok((
       Self {
         params,
-        pk_column_name,
+        pk_column_name: pk_column_name.to_string(),
         pk_column_value: pk_column_param,
       },
       files,
@@ -381,10 +358,10 @@ pub enum Params<'a> {
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(
-  accessor: &S,
+  column_accessor: &S,
   multipart_files: Vec<FileUploadRequest>,
+  file_token_decoder: Option<&dyn Fn(&str) -> Result<FileToken, JsonError>>,
   params: &mut Vec<NamedParam>,
-  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
 ) -> Result<FileMetadataAndPayload, ParamsError> {
   let files: Vec<(String, FileUpload, Payload)> = multipart_files
     .into_iter()
@@ -412,7 +389,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
       column,
       json,
       ..
-    }) = accessor.column_by_name(field_name)
+    }) = column_accessor.column_by_name(field_name)
     else {
       continue;
     };
@@ -459,18 +436,25 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
 }
 
 fn extract_params_and_files_from_json(
+  column_metadata: &ColumnMetadata,
   json_schema_registry: &JsonSchemaRegistry,
-  col: &Column,
-  json_metadata: Option<&JsonColumnMetadata>,
-  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
-  #[allow(unused)] is_geometry: bool,
   value: serde_json::Value,
+  opts: &ParamOptions,
   allow_file_metadata: bool,
 ) -> Result<(Value, Option<FileMetadataAndPayload>), ParamsError> {
+  let ColumnMetadata {
+    column,
+    json,
+    is_geometry,
+    ..
+  } = column_metadata;
+
   // If this is *not* a JSON column convert the value trivially.
-  let Some(json_metadata) = json_metadata else {
+  let Some(json_metadata) = json else {
+    debug_assert!(!is_geometry || column.data_type == ColumnDataType::Blob);
+
     #[cfg(any(feature = "geos", feature = "geos-static"))]
-    if is_geometry && col.data_type == ColumnDataType::Blob {
+    if *is_geometry && column.data_type == ColumnDataType::Blob {
       use geos::Geom;
 
       let json_geometry = geos::geojson::Geometry::from_json_value(value)
@@ -483,25 +467,26 @@ fn extract_params_and_files_from_json(
       }
 
       return Ok((Into::<Value>::into(writer.write_wkb(&geometry)?), None));
-    } else {
-      debug_assert!(!is_geometry);
     }
 
-    return Ok((flat_json_to_value(col.data_type, value)?, None));
+    return Ok((flat_json_to_value(column.data_type, value)?, None));
   };
 
   // So this *is* a JSON column => we need to be smarter.
-  if col.data_type != ColumnDataType::Text {
+  if column.data_type != ColumnDataType::Text {
     return Err(ParamsError::NestedObject(format!(
-      "Column data mismatch for: {col:?}",
+      "Column data mismatch for: {column:?}",
     )));
   }
 
   // Handle file columns specially, i.e. convert the JSON.
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-      let (metadata, contents) =
-        extract_param_and_file_from_json_value(file_token_decoder, allow_file_metadata, value)?;
+      let (metadata, contents) = extract_param_and_file_from_json_value(
+        opts.file_token_decoder,
+        allow_file_metadata,
+        value,
+      )?;
       let param = Value::Text(serde_json::to_string(&metadata)?);
       return Ok((param, Some(vec![(metadata, contents)])));
     }
@@ -513,8 +498,11 @@ fn extract_params_and_files_from_json(
       let uploads: FileMetadataAndPayload = array
         .into_iter()
         .map(|value| {
-          let (metadata, contents) =
-            extract_param_and_file_from_json_value(file_token_decoder, allow_file_metadata, value)?;
+          let (metadata, contents) = extract_param_and_file_from_json_value(
+            opts.file_token_decoder,
+            allow_file_metadata,
+            value,
+          )?;
           return Ok((metadata, contents));
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
@@ -554,7 +542,7 @@ fn extract_params_and_files_from_json(
 }
 
 fn extract_param_and_file_from_json_value(
-  file_token_decoder: &impl Fn(&str) -> Result<FileToken, JsonError>,
+  file_token_decoder: Option<&dyn Fn(&str) -> Result<FileToken, JsonError>>,
   allow_file_metadata: bool,
   value: serde_json::Value,
 ) -> Result<(FileUpload, Payload), ParamsError> {
@@ -734,8 +722,10 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None,
-          &|_| Err(JsonError::NotImplemented),
+          ParamOptions {
+            multipart_files: None,
+            file_token_decoder: None,
+          },
         )
         .unwrap()
         .0,
@@ -757,8 +747,10 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None,
-          &|_| Err(JsonError::NotImplemented),
+          ParamOptions {
+            multipart_files: None,
+            file_token_decoder: None,
+          },
         )
         .unwrap()
         .0,
@@ -777,8 +769,10 @@ mod tests {
         &metadata,
         &registry,
         json_row_from_value(value.clone()).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None,
+        },
       );
 
       assert!(params.is_err(), "{params:?}");
@@ -800,8 +794,10 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None,
-          &|_| Err(JsonError::NotImplemented),
+          ParamOptions {
+            multipart_files: None,
+            file_token_decoder: None,
+          },
         )
         .is_err()
       );
@@ -822,8 +818,10 @@ mod tests {
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None,
+        },
       )
       .unwrap()
       .0;
@@ -844,8 +842,10 @@ mod tests {
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
-          None,
-          &|_| Err(JsonError::NotImplemented),
+          ParamOptions {
+            multipart_files: None,
+            file_token_decoder: None,
+          },
         )
         .is_err()
       );
@@ -869,8 +869,10 @@ mod tests {
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None,
+        },
       )
       .unwrap()
       .0;
@@ -937,11 +939,12 @@ mod tests {
       UpdateParams::new(
         &metadata,
         &registry,
+        ("id", Value::Integer(id)),
         json_row_from_value(empty).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
-        "id".to_string(),
-        Value::Integer(id),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None
+        },
       )
       .is_err()
     );
@@ -953,11 +956,12 @@ mod tests {
       UpdateParams::new(
         &metadata,
         &registry,
+        ("id", Value::Integer(id)),
         json_row_from_value(unknown_column).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
-        "id".to_string(),
-        Value::Integer(id),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None
+        },
       )
       .is_err()
     );
@@ -981,9 +985,8 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let registry = Arc::new(
-      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
-    );
+    let registry =
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let id: i64 = 5;
@@ -992,7 +995,8 @@ mod tests {
     {
       let (params, files) = UpdateParams::for_admin_update(
         &metadata,
-        registry.clone(),
+        &registry,
+        ("id", SqlValue::Integer(id)),
         indexmap::IndexMap::<String, SqlValue>::from([
           ("name".to_string(), SqlValue::Text("Alice".to_string())),
           (
@@ -1010,9 +1014,10 @@ mod tests {
             ),
           ),
         ]),
-        &|_| Err(JsonError::NotImplemented),
-        "id".to_string(),
-        SqlValue::Integer(id),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None,
+        },
       )
       .unwrap();
 
@@ -1043,11 +1048,12 @@ mod tests {
         UpdateParams::new(
           &metadata,
           &registry,
+          ("id", Value::Integer(id)),
           json_row_from_value(non_admin_value).unwrap(),
-          None,
-          &|_| Err(JsonError::NotImplemented),
-          "id".to_string(),
-          Value::Integer(id),
+          ParamOptions {
+            multipart_files: None,
+            file_token_decoder: None,
+          },
         )
         .err(),
         Some(ParamsError::JsonSerialization(_))
@@ -1069,11 +1075,12 @@ mod tests {
       let (params, files) = UpdateParams::new(
         &metadata,
         &registry,
+        ("id", Value::Integer(id)),
         json_row_from_value(value_with_new_file).unwrap(),
-        None,
-        &|_| Err(JsonError::NotImplemented),
-        "id".to_string(),
-        Value::Integer(id),
+        ParamOptions {
+          multipart_files: None,
+          file_token_decoder: None,
+        },
       )
       .unwrap();
 

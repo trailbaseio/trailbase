@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::json_schema::{Error as JsonError, FileUploadRequest};
+use trailbase_schema::json_schema::FileUploadRequest;
 use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
 
@@ -12,7 +12,9 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataAndPayload, InsertParams, JsonRow, ParamsError};
+use crate::records::params::{
+  FileMetadataAndPayload, InsertParams, JsonRow, ParamOptions, ParamsError,
+};
 use crate::records::queries::InsertOrReplaceRecordApiQuery;
 use crate::records::transaction::{Op, OpResult, WriteQuery};
 use crate::records::{RecordApi, RecordError};
@@ -265,8 +267,10 @@ pub(crate) fn build_insert_params(
     api,
     &state.json_schema_registry().load_full(),
     record,
-    files,
-    &|_| Err(JsonError::NotImplemented),
+    ParamOptions {
+      multipart_files: files,
+      file_token_decoder: None,
+    },
   );
 }
 
