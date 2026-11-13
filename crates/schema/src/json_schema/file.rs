@@ -47,8 +47,7 @@ pub type FileTokenDecoder<'a> = dyn Fn(&str) -> Result<FileToken, Error> + 'a;
 
 /// Wire representation of upload requests, which may either contain data or use a token to
 /// represent round-tripped data for update operations.
-#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
-#[cfg_attr(debug_assertions, derive(Serialize))]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 #[schemars(description = "")]
 pub enum FileUploadRequest {
@@ -97,8 +96,7 @@ impl FileUploadRequest {
 /// File input schema used both for multipart-form uploads (in which case the name is mapped to
 /// column names) and JSON where the column name is extracted from the corresponding key of the
 /// parent object.
-#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
-#[cfg_attr(debug_assertions, derive(Serialize))]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 #[schemars(description = "")]
 pub struct FileUploadData {
@@ -145,8 +143,7 @@ impl FileUploadData {
 }
 
 /// Wire-representation of FileUpload responses, e.g. read_file.
-#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(debug_assertions, derive(Deserialize))]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[schemars(description = "")]
 pub struct FileUploadResponse {
   /// An opaque token to reference this file in update-operations.
