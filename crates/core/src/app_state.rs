@@ -199,6 +199,8 @@ impl AppState {
       )
       .await;
 
+      let file_token_key = get_or_init_aes256_file_key(&args.data_dir)?;
+
       let main_conn = connection_manager.main_entry().connection.clone();
 
       AppState {
@@ -249,8 +251,8 @@ impl AppState {
           connection_manager,
           jwt,
           record_apis: record_apis.clone(),
-          subscription_manager: SubscriptionManager::new(record_apis),
-          file_token_key: get_or_init_aes256_file_key(&args.data_dir)?,
+          subscription_manager: SubscriptionManager::new(&file_token_key, record_apis),
+          file_token_key,
           object_store,
           #[cfg(feature = "wasm")]
           wasm: crate::wasm::WasmState::init(
@@ -844,6 +846,8 @@ mod test_utils {
     )
     .await;
 
+    let file_token_key = crate::aes::generate_random_key();
+
     return Ok(AppState {
       state: Arc::new(InternalState {
         data_dir,
@@ -868,8 +872,8 @@ mod test_utils {
         connection_manager,
         jwt: crate::auth::jwt::test_jwt_helper(),
         record_apis: record_apis.clone(),
-        subscription_manager: SubscriptionManager::new(record_apis),
-        file_token_key: crate::aes::generate_random_key(),
+        subscription_manager: SubscriptionManager::new(&file_token_key, record_apis),
+        file_token_key,
         object_store,
         #[cfg(feature = "wasm")]
         wasm: crate::wasm::WasmState::default(),

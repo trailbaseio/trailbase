@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
-  ColumnMetadata, ConnectionMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
-  find_user_id_foreign_key_columns,
+  ColumnMetadata, ConnectionMetadata, TableMetadata, ViewMetadata,
+  find_user_id_foreign_key_columns, has_file_columns,
 };
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::to_sql::ToSqlProxy;
@@ -65,7 +65,7 @@ impl RecordApiSchema {
     };
 
     let column_metadata = filter_excluded_columns(config, &table_metadata.column_metadata);
-    let has_file_columns = !find_file_column_indexes(&column_metadata).is_empty();
+    let has_file_columns = has_file_columns(&column_metadata);
     let user_id_columns = find_user_id_foreign_key_columns(&column_metadata, USER_TABLE);
 
     let column_name_to_index = HashMap::<String, usize>::from_iter(
@@ -113,7 +113,7 @@ impl RecordApiSchema {
     };
 
     let column_metadata = filter_excluded_columns(config, column_metadata);
-    let has_file_columns = !find_file_column_indexes(&column_metadata).is_empty();
+    let has_file_columns = has_file_columns(&column_metadata);
     let user_id_columns = find_user_id_foreign_key_columns(&column_metadata, USER_TABLE);
 
     let column_name_to_index = HashMap::<String, usize>::from_iter(
