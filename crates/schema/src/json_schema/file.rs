@@ -13,9 +13,22 @@ pub struct FileToken {
   pub column_name: String,
   /// Record's primary key.
   pub pk: trailbase_sqlite::Value,
-
-  /// Original fileupload being round-tripped.
+  /// Original FileUpload being round-tripped.
   pub metadata: FileUpload,
+}
+
+// Same as above but with references for effiecient serialization.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FileTokenRef<'a> {
+  /// Name of the table, the file is from.
+  pub table_name: &'a str,
+  /// Column name the file is from. Needs to be included, triggers are installed per-column,
+  /// consequently moving between columns is not possible w/o the file being deleted.
+  pub column_name: &'a str,
+  /// Record's primary key.
+  pub pk: &'a trailbase_sqlite::Value,
+  /// Original FileUpload being round-tripped.
+  pub metadata: &'a FileUpload,
 }
 
 #[derive(Debug, Clone, PartialEq)]
