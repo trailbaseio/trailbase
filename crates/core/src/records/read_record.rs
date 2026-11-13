@@ -986,15 +986,14 @@ mod tests {
     .await
     .unwrap();
 
-    let conn = state.conn().clone();
-
     // Checks the contents of all 3 files for the given record id and returns the file id.
     let assert_all_files_contents = async |record_id: &str| -> Vec<Uuid> {
       let record_uuid = BASE64_URL_SAFE.decode(record_id).unwrap();
 
       // NOTE: We cannot use `read_record_handler` here because we're striping the object-store uuid
       // from the public response.
-      let row = conn
+      let row = state
+        .conn()
         .read_query_row(
           format!("SELECT file, files FROM {TABLE_NAME} WHERE id = ?1"),
           (record_uuid,),

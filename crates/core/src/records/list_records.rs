@@ -104,6 +104,7 @@ pub async fn list_records_handler(
   let pk_column = &pk_meta.column;
   let pk_index = pk_meta.index;
   let is_table = api.is_table();
+  let has_file_column = api.has_file_columns();
 
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   let geojson_geometry_column = if let Some(column) = query.geojson {
@@ -346,6 +347,7 @@ pub async fn list_records_handler(
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
+          // We don't support file tokens on expanded foreign `FileUpload(s)` columns.
           let foreign_value = record_to_json_expand(
             &expanded.metadata.column_metadata,
             &[],
@@ -364,9 +366,9 @@ pub async fn list_records_handler(
         }
 
         let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
-          if api.has_file_columns() {
+          if has_file_column && let Ok(record_id) = row.get_value(pk_index) {
+            let record_id = record_id.clone();
             let table_name = api.table_name().clone();
-            let record_id = row.get_value(pk_index).expect("FIXME").clone();
             let file_token_key = *state.file_token_key();
 
             Some(&move |column_name: &str, metadata: FileUpload| {
@@ -397,9 +399,9 @@ pub async fn list_records_handler(
       .iter()
       .map(|row| {
         let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
-          if api.has_file_columns() {
+          if has_file_column && let Ok(record_id) = row.get_value(pk_index) {
+            let record_id = record_id.clone();
             let table_name = api.table_name().clone();
-            let record_id = row.get_value(pk_index).expect("FIXME").clone();
             let file_token_key = *state.file_token_key();
 
             Some(&move |column_name: &str, metadata: FileUpload| {
@@ -532,6 +534,7 @@ mod tests {
   use trailbase_schema::db::metadata::ColumnMetadata;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::{Column, QualifiedName};
+  use trailbase_schema::json_schema::{FileUploadData, FileUploadRequest, FileUploadResponse};
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -539,7 +542,9 @@ mod tests {
   use crate::auth::user::User;
   use crate::config::proto::{self, PermissionFlag};
   use crate::connection::ConnectionEntry;
+  use crate::extract::Either;
   use crate::records::RecordError;
+  use crate::records::create_record::{CreateRecordQuery, create_record_handler};
   use crate::records::test_utils::*;
   use crate::util::{id_to_b64, urlencode};
 
@@ -796,7 +801,7 @@ mod tests {
     .await
     .unwrap();
 
-    let ListOrGeoJSONResponse::List(response) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(response)) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -804,9 +809,7 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
@@ -818,7 +821,7 @@ mod tests {
 
     let first = to_entry(&response.records[0]);
 
-    let ListOrGeoJSONResponse::List(response) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(response)) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -826,16 +829,14 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
     assert_eq!(1, response.records.len());
     assert_eq!(first, to_entry(&response.records[0]));
 
-    let ListOrGeoJSONResponse::List(null_response) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(null_response)) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -843,15 +844,13 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
     assert_eq!(2, null_response.records.len());
 
-    let ListOrGeoJSONResponse::List(not_null_response) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(not_null_response)) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -859,9 +858,7 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
     assert_eq!(1, not_null_response.records.len());
@@ -899,7 +896,7 @@ mod tests {
 
     {
       // Unauthenticated users cannot list
-      let response = list_records(&state, None, None).await;
+      let response = list_message_api_records(&state, None, None).await;
       assert!(
         is_auth_err(response.as_ref().err().unwrap()),
         "{response:?}"
@@ -945,7 +942,7 @@ mod tests {
 
     {
       // User X can list the messages they have access to, i.e. room0.
-      let resp = list_records(&state, Some(&user_x_tokens.auth_token), None)
+      let resp = list_message_api_records(&state, Some(&user_x_tokens.auth_token), None)
         .await
         .unwrap();
 
@@ -963,7 +960,7 @@ mod tests {
       );
 
       let first = &messages[0];
-      let resp_by_id = list_records(
+      let resp_by_id = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some(format!("filter[mid]={}", first.mid)),
@@ -979,7 +976,7 @@ mod tests {
       // Test total count.
       //
       // User X can list the messages they have access to, i.e. room0.
-      let resp = list_records(
+      let resp = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some("count=TRUE".to_string()),
@@ -1002,7 +999,7 @@ mod tests {
       );
 
       // Edge case for limit=0. It's a convenient way to just get the total count of records.
-      let resp = list_records(
+      let resp = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some("count=TRUE&limit=0".to_string()),
@@ -1014,7 +1011,7 @@ mod tests {
       assert_eq!(resp.total_count, Some(2));
 
       // Let's paginate
-      let resp0 = list_records(
+      let resp0 = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some("count=1&limit=1".to_string()),
@@ -1027,7 +1024,7 @@ mod tests {
       assert_eq!(resp0.total_count, Some(2));
 
       let cursor = resp0.cursor.unwrap();
-      let resp1 = list_records(
+      let resp1 = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some(format!("count=1&limit=1&cursor={cursor}")),
@@ -1040,7 +1037,7 @@ mod tests {
       assert_eq!(resp1.total_count, Some(2));
       let cursor = resp1.cursor.unwrap();
 
-      let resp2 = list_records(
+      let resp2 = list_message_api_records(
         &state,
         Some(&user_x_tokens.auth_token),
         Some(format!("count=1&limit=1&cursor={cursor}")),
@@ -1054,7 +1051,7 @@ mod tests {
 
     {
       // User Y can list the messages they have access to, i.e. room0 & room1.
-      let arr = list_records(
+      let arr = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some("".to_string()),
@@ -1064,7 +1061,7 @@ mod tests {
       .records;
       assert_eq!(arr.len(), 3);
 
-      let limited_arr = list_records(
+      let limited_arr = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some("limit=1".to_string()),
@@ -1078,7 +1075,7 @@ mod tests {
       let messages: Vec<Message> = arr.iter().map(to_message_raw).collect();
       let first = &messages[0].mid;
       let third = &messages[2].mid;
-      let filtered_arr = list_records(
+      let filtered_arr = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!(
@@ -1097,7 +1094,7 @@ mod tests {
 
     {
       // Filter by column with name that needs escaping.
-      let arr_asc = list_records(
+      let arr_asc = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("table=0")),
@@ -1110,7 +1107,7 @@ mod tests {
 
     {
       // Offset
-      let result0 = list_records(
+      let result0 = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("offset=0")),
@@ -1120,7 +1117,7 @@ mod tests {
       .records;
       assert_eq!(result0.len(), 3);
 
-      let result1 = list_records(
+      let result1 = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("offset=1")),
@@ -1133,7 +1130,7 @@ mod tests {
 
     {
       // Ordering by message id;
-      let arr_asc = list_records(
+      let arr_asc = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("order={}", urlencode("+mid"))),
@@ -1146,7 +1143,7 @@ mod tests {
       assert_eq!(arr_asc.len(), 3);
 
       // Ordering by 'table', which needs proper escaping;
-      let arr_table_asc = list_records(
+      let arr_table_asc = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("order={}", urlencode("+table"))),
@@ -1160,7 +1157,7 @@ mod tests {
       // same time slot.
       // assert!(to_message(arr_asc[0].clone()).mid < to_message(arr_asc[1].clone()).mid);
 
-      let arr_desc = list_records(
+      let arr_desc = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some("order=-mid".to_string()),
@@ -1174,7 +1171,7 @@ mod tests {
       assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
 
       // Ordering and cursor work well together.
-      let cursor_middle = list_records(
+      let cursor_middle = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         // We're basically getting a cursor to the third element.
@@ -1185,7 +1182,7 @@ mod tests {
       .cursor
       .unwrap();
 
-      let cursored_desc = list_records(
+      let cursored_desc = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!(
@@ -1210,7 +1207,7 @@ mod tests {
 
       // NOTE: Ascending ordering by PK column is no longer allowed, since PK might no longer
       // strictly monotonically increase like the _rowid_ by which we cursor.
-      // let mut cursored_asc = list_records(
+      // let mut cursored_asc = list_message_api_records(
       //   &state,
       //   Some(&user_y_token.auth_token),
       //   Some(format!(
@@ -1230,7 +1227,7 @@ mod tests {
 
       // Ordering and cursor return an error when PK is not primary order cirteria.
       assert!(
-        list_records(
+        list_message_api_records(
           &state,
           Some(&user_y_tokens.auth_token),
           Some(format!(
@@ -1245,7 +1242,7 @@ mod tests {
 
     {
       // Filter by room
-      let arr0 = list_records(
+      let arr0 = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("filter[room]={}", id_to_b64(&room0))),
@@ -1256,7 +1253,7 @@ mod tests {
 
       assert_eq!(arr0.len(), 2, "{arr0:?}");
 
-      let arr1 = list_records(
+      let arr1 = list_message_api_records(
         &state,
         Some(&user_y_tokens.auth_token),
         Some(format!("filter[room][$eq]={}", id_to_b64(&room1))),
@@ -1305,7 +1302,7 @@ mod tests {
     .unwrap();
 
     // Make sure setup works in principle.
-    let ListOrGeoJSONResponse::List(response) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(response)) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -1313,9 +1310,7 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
@@ -1336,7 +1331,7 @@ mod tests {
     );
   }
 
-  async fn list_records(
+  async fn list_message_api_records(
     state: &AppState,
     auth_token: Option<&str>,
     query: Option<String>,
@@ -1350,10 +1345,11 @@ mod tests {
     )
     .await?;
 
-    if let ListOrGeoJSONResponse::List(response) = json_response.0 {
-      return Ok(response);
+    let Json(ListOrGeoJSONResponse::List(response)) = json_response else {
+      panic!("not a list response: {json_response:?}");
     };
-    panic!("not a list response: {json_response:?}");
+
+    return Ok(response);
   }
 
   #[tokio::test]
@@ -1399,7 +1395,7 @@ mod tests {
     .await
     .unwrap();
 
-    let ListOrGeoJSONResponse::List(resp) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(resp)) = list_records_handler(
       State(state.clone()),
       Path("data_view_api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -1407,9 +1403,7 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
@@ -1428,7 +1422,7 @@ mod tests {
     .await
     .unwrap();
 
-    let ListOrGeoJSONResponse::List(resp_filtered0) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(resp_filtered0)) = list_records_handler(
       State(state.clone()),
       Path("data_view_filtered_api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -1436,16 +1430,14 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
     assert_eq!(2, resp_filtered0.records.len());
     assert_eq!(2, resp_filtered0.total_count.unwrap());
 
-    let ListOrGeoJSONResponse::List(resp_filtered1) = list_records_handler(
+    let Json(ListOrGeoJSONResponse::List(resp_filtered1)) = list_records_handler(
       State(state.clone()),
       Path("data_view_filtered_api".to_string()),
       Query(ListRecordsQuery::default()),
@@ -1453,14 +1445,141 @@ mod tests {
       None,
     )
     .await
-    .unwrap()
-    .0
-    else {
+    .unwrap() else {
       panic!("not a list");
     };
 
     assert_eq!(1, resp_filtered1.records.len());
     assert_eq!(1, resp_filtered1.total_count.unwrap());
+  }
+
+  #[tokio::test]
+  async fn test_list_table_with_file_columns() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    const TABLE_NAME: &str = "table 😍";
+    const API_NAME: &str = "test_api";
+
+    conn
+      .execute_batch(format!(
+        r#"
+          CREATE TABLE "{TABLE_NAME}" (
+            id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+            file         {json} CHECK(jsonschema('std.FileUpload', file)),
+            files        {json} CHECK(jsonschema('std.FileUploads', files)),
+            "test 😍"    TEXT NOT NULL DEFAULT('')
+          ) {strict};
+        "#,
+        strict = strict(conn),
+        uuid = uuid_column(&conn),
+        json = json_column(&conn),
+      ))
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      proto::RecordApiConfig {
+        name: Some(API_NAME.to_string()),
+        table_name: Some(TABLE_NAME.to_string()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Delete as i32,
+          PermissionFlag::Update as i32,
+        ]
+        .into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let file0 = FileUploadData {
+      name: Some("foo0".to_string()),
+      filename: Some("bar0".to_string()),
+      content_type: Some("baz0".to_string()),
+      data: vec![0, 1, 2, 3, 4, 5],
+    };
+
+    let file1 = FileUploadData {
+      name: Some("foo1".to_string()),
+      filename: Some("bar1".to_string()),
+      content_type: Some("baz1".to_string()),
+      data: vec![0, 1, 1, 2],
+    };
+
+    let file2 = FileUploadData {
+      name: Some("foo2".to_string()),
+      filename: Some("bar2".to_string()),
+      content_type: Some("baz2".to_string()),
+      data: vec![42, 5, 42, 5],
+    };
+
+    #[derive(Serialize)]
+    struct PartialRequestSchema {
+      file: FileUploadRequest,
+      files: Vec<FileUploadRequest>,
+    }
+
+    #[derive(Deserialize)]
+    struct PartialResponseSchema {
+      file: FileUploadResponse,
+      files: Vec<FileUploadResponse>,
+    }
+
+    let request = serde_json::to_value(&PartialRequestSchema {
+      file: FileUploadRequest::Data(file0.clone()),
+      files: vec![
+        FileUploadRequest::Data(file1.clone()),
+        FileUploadRequest::Data(file2.clone()),
+      ],
+    })
+    .unwrap();
+
+    let _ = create_record_handler(
+      State(state.clone()),
+      Path(API_NAME.to_string()),
+      Query(CreateRecordQuery::default()),
+      None,
+      Either::Json(json_row_from_value(request.clone()).unwrap().into()),
+    )
+    .await
+    .unwrap();
+
+    let Json(ListOrGeoJSONResponse::List(list_response)) = list_records_handler(
+      State(state.clone()),
+      Path(API_NAME.to_string()),
+      Query(ListRecordsQuery::default()),
+      RawQuery(Some("count=true".to_string())),
+      None,
+    )
+    .await
+    .unwrap() else {
+      panic!("not a list response");
+    };
+
+    let ListResponse {
+      cursor,
+      total_count,
+      records,
+    } = list_response;
+
+    assert_eq!(Some(1), total_count);
+    assert!(cursor.is_some());
+    let records: Vec<_> = records
+      .into_iter()
+      .map(|record| serde_json::from_str::<PartialResponseSchema>(record.get()).unwrap())
+      .collect();
+
+    assert!(records[0].file.token.is_some());
+    assert!(records[0].files[0].token.is_some());
+    assert!(records[0].files[1].token.is_some());
+
+    // NOTE: we test the round-tripping of tokens in the read_record's tests.
   }
 
   // TODO: enable PostGIS with oliphaunt-wasix.
@@ -1511,7 +1630,7 @@ mod tests {
     .unwrap();
 
     {
-      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+      let Json(ListOrGeoJSONResponse::GeoJSON(response)) = list_records_handler(
         State(state.clone()),
         Path(name.to_string()),
         Query(ListRecordsQuery {
@@ -1522,9 +1641,7 @@ mod tests {
         None,
       )
       .await
-      .unwrap()
-      .0
-      else {
+      .unwrap() else {
         panic!("not GeoJSON");
       };
 
@@ -1533,7 +1650,7 @@ mod tests {
 
     {
       // Test that stored point is `within` a filter bounding box.
-      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+      let Json(ListOrGeoJSONResponse::GeoJSON(response)) = list_records_handler(
         State(state.clone()),
         Path(name.to_string()),
         Query(ListRecordsQuery {
@@ -1548,9 +1665,7 @@ mod tests {
         None,
       )
       .await
-      .unwrap()
-      .0
-      else {
+      .unwrap() else {
         panic!("not GeoJSON");
       };
 
@@ -1563,7 +1678,7 @@ mod tests {
 
     {
       // Test that stored polygon `contains` a filter point.
-      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+      let Json(ListOrGeoJSONResponse::GeoJSON(response)) = list_records_handler(
         State(state.clone()),
         Path(name.to_string()),
         Query(ListRecordsQuery {
@@ -1577,9 +1692,7 @@ mod tests {
         None,
       )
       .await
-      .unwrap()
-      .0
-      else {
+      .unwrap() else {
         panic!("not GeoJSON");
       };
 
