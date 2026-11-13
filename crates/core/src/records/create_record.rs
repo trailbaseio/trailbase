@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
-use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
+use crate::records::files::{AsyncFileManager, FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataAndPayload, InsertParams, JsonRow, ParamOptions, ParamsError,
 };
@@ -126,34 +126,32 @@ pub async fn create_record_handler(
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-      let (file_manager, file_committer) = if !files.is_empty() {
-        let (file_manager, file_committer) =
-          AsyncFileManager::new(state.objectstore().clone(), files);
-        (Some(file_manager), Some(file_committer))
-      } else {
-        (None, None)
-      };
-
       let query = InsertOrReplaceRecordApiQuery::new(api.clone(), params)?;
       query.check_table_level_access(user.as_ref())?;
 
-      let write_result = conn
-        .call_writer(move |mut conn| -> Result<_, RecordError> {
-          query.check_record_level_access(&mut conn, user.as_ref())?;
+      let write_result = if files.is_empty() {
+        conn
+          .call_writer(move |mut conn| -> Result<_, RecordError> {
+            query.check_record_level_access(&mut conn, user.as_ref())?;
+            return Ok(query.apply(&mut conn)?);
+          })
+          .await?
+      } else {
+        let query = conn
+          .call_reader(move |mut conn| -> Result<_, RecordError> {
+            query.check_record_level_access(&mut conn, user.as_ref())?;
+            return Ok(query);
+          })
+          .await?;
 
-          // We're storing any files to the object store first to make sure the DB entry is valid right
-          // after commit and not racily pointing to soon-to-be-written files.
-          if let Some(file_committer) = file_committer {
-            file_committer.start_async_write();
-          }
+        let mut file_manager = FileManager::write(state.objectstore(), files).await?;
 
-          return Ok(query.apply(&mut conn)?);
-        })
-        .await?;
+        let write_result = conn
+          .call_writer(move |mut conn| query.apply(&mut conn))
+          .await?;
 
-      if let Some(mut file_manager) = file_manager {
-        // Successful insert, release and do not cleanup written files.
-        file_manager.release().await;
+        // Successful DB write, release files to not be cleaned up.
+        file_manager.release();
 
         if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Replace {
           tokio::spawn(async move {
@@ -170,12 +168,15 @@ pub async fn create_record_handler(
             }
           });
         }
-      }
+
+        write_result
+      };
 
       vec![extract_record_id(write_result.pk_value.unwrap_or(
         trailbase_sqlite::Value::Integer(write_result.rowid),
       ))?]
     }
+    // Batch insertions.
     _ => {
       let ops = records_and_files
         .into_iter()
