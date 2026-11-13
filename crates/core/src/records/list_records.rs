@@ -12,8 +12,9 @@ use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::db::QualifiedNameEscaped;
-use trailbase_schema::json::{JsonError, record_to_json_expand, record_to_json_expand_ref};
-use trailbase_schema::json_schema::FileUpload;
+use trailbase_schema::json::{
+  FileMetadataSanitizer, JsonError, record_to_json_expand, record_to_json_expand_ref,
+};
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::aes::{KeyType, decrypt, encrypt, generate_random_key};
@@ -21,6 +22,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{ExpandedTable, build_expand_tables_params};
+use crate::records::file_token::build_file_metadata_sanitizer;
 use crate::records::{Permission, RecordError};
 use crate::util::row_id_column;
 
@@ -365,21 +367,13 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
+        let file_metadata_sanitizer =
           if has_file_column && let Ok(record_id) = row.get_value(pk_index) {
-            let record_id = record_id.clone();
-            let table_name = api.table_name().clone();
-            let file_token_key = *state.file_token_key();
-
-            Some(&move |column_name: &str, metadata: FileUpload| {
-              return crate::records::file_id::file_metadata_sanitizer(
-                &file_token_key,
-                &table_name,
-                column_name,
-                &record_id,
-                metadata,
-              );
-            })
+            Some(build_file_metadata_sanitizer(
+              state.file_token_key(),
+              api.table_name(),
+              record_id,
+            ))
           } else {
             None
           };
@@ -389,7 +383,9 @@ pub async fn list_records_handler(
           config_expand,
           row,
           Some(expand),
-          file_metadata_sanitizer,
+          file_metadata_sanitizer
+            .as_ref()
+            .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
         )
         .map_err(|err| RecordError::Internal(err.into()));
       })
@@ -398,21 +394,13 @@ pub async fn list_records_handler(
     rows
       .iter()
       .map(|row| {
-        let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
+        let file_metadata_sanitizer =
           if has_file_column && let Ok(record_id) = row.get_value(pk_index) {
-            let record_id = record_id.clone();
-            let table_name = api.table_name().clone();
-            let file_token_key = *state.file_token_key();
-
-            Some(&move |column_name: &str, metadata: FileUpload| {
-              return crate::records::file_id::file_metadata_sanitizer(
-                &file_token_key,
-                &table_name,
-                column_name,
-                &record_id,
-                metadata,
-              );
-            })
+            Some(build_file_metadata_sanitizer(
+              state.file_token_key(),
+              api.table_name(),
+              record_id,
+            ))
           } else {
             None
           };
@@ -422,7 +410,9 @@ pub async fn list_records_handler(
           config_expand,
           row,
           None,
-          file_metadata_sanitizer,
+          file_metadata_sanitizer
+            .as_ref()
+            .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
         )
       })
       .collect::<Result<Vec<_>, JsonError>>()

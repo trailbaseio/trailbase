@@ -2,7 +2,9 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
-use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
+use trailbase_schema::json::{
+  FileMetadataSanitizer, record_to_json_expand, record_to_json_expand_ref,
+};
 use trailbase_schema::json_schema::FileUpload;
 
 use crate::app_state::AppState;
@@ -10,6 +12,7 @@ use crate::auth::user::User;
 use crate::extract::RawJson;
 use crate::records::RecordError;
 use crate::records::expand::build_expand_tables_params;
+use crate::records::file_token::build_file_metadata_sanitizer;
 use crate::records::files::read_file_into_response;
 use crate::records::queries::ReadFileRecordApiQuery;
 use crate::records::queries::ReadRecordApiQuery;
@@ -79,24 +82,15 @@ pub async fn read_record_handler(
     })
     .await?;
 
-  let file_metadata_sanitizer: Option<&trailbase_schema::json::FileMetadataSanitizer> =
-    if api.has_file_columns() {
-      let table_name = api.table_name().clone();
-      let record_id = record_id.clone();
-      let file_token_key = *state.file_token_key();
-
-      Some(&move |column_name: &str, metadata: FileUpload| {
-        return crate::records::file_id::file_metadata_sanitizer(
-          &file_token_key,
-          &table_name,
-          column_name,
-          &record_id,
-          metadata,
-        );
-      })
-    } else {
-      None
-    };
+  let file_metadata_sanitizer = if api.has_file_columns() {
+    Some(build_file_metadata_sanitizer(
+      state.file_token_key(),
+      api.table_name(),
+      &record_id,
+    ))
+  } else {
+    None
+  };
 
   let json_obj = if let Some(expanded_tables) = expanded_tables
     && !expanded_tables.is_empty()
@@ -112,7 +106,9 @@ pub async fn read_record_handler(
         &[],
         &curr,
         None,
-        file_metadata_sanitizer,
+        file_metadata_sanitizer
+          .as_ref()
+          .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
       )
       .map_err(|err| RecordError::Internal(err.into()))?;
 
@@ -129,7 +125,9 @@ pub async fn read_record_handler(
       config_expand,
       &row,
       Some(expand),
-      file_metadata_sanitizer,
+      file_metadata_sanitizer
+        .as_ref()
+        .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
     )
     .map_err(|err| RecordError::Internal(err.into()))?
   } else {
@@ -138,7 +136,9 @@ pub async fn read_record_handler(
       config_expand,
       &row,
       None,
-      file_metadata_sanitizer,
+      file_metadata_sanitizer
+        .as_ref()
+        .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
     )
     .map_err(|err| RecordError::Internal(err.into()))?
   };
@@ -339,7 +339,7 @@ mod tests {
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::delete_record::delete_record_handler;
-  use crate::records::file_id::file_token_decrypt;
+  use crate::records::file_token::file_token_decrypt;
   use crate::records::files::FileDeletionsDb;
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
