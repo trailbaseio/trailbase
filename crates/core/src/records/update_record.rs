@@ -5,7 +5,7 @@ use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::file_token::build_file_token_decoder;
-use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
+use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileTokenDecoder, JsonRow, ParamOptions, UpdateParams};
 use crate::records::queries::UpdateRecordApiQuery;
 
@@ -65,33 +65,32 @@ pub async fn update_record_handler(
   )
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-  let (file_manager, file_committer) = if !files.is_empty() {
-    let (file_manager, file_committer) = AsyncFileManager::new(state.objectstore().clone(), files);
-    (Some(file_manager), Some(file_committer))
-  } else {
-    (None, None)
-  };
-
   let query = UpdateRecordApiQuery::new(api.clone(), params)?;
   query.check_table_level_access(user.as_ref())?;
 
-  let write_result = conn
-    .call_writer(move |mut conn| -> Result<_, RecordError> {
-      query.check_record_level_access(&mut conn, user.as_ref())?;
+  if files.is_empty() {
+    conn
+      .call_writer(move |mut conn| -> Result<_, RecordError> {
+        query.check_record_level_access(&mut conn, user.as_ref())?;
+        return Ok(query.apply(&mut conn)?);
+      })
+      .await?;
+  } else {
+    let query = conn
+      .call_reader(move |mut conn| -> Result<_, RecordError> {
+        query.check_record_level_access(&mut conn, user.as_ref())?;
+        return Ok(query);
+      })
+      .await?;
 
-      // We're storing any files to the object store first to make sure the DB entry is valid right
-      // after commit and not racily pointing to soon-to-be-written files.
-      if let Some(file_committer) = file_committer {
-        file_committer.start_async_write();
-      }
+    let mut file_manager = FileManager::write(state.objectstore(), files).await?;
 
-      return Ok(query.apply(&mut conn)?);
-    })
-    .await?;
+    let write_result = conn
+      .call_writer(move |mut conn| query.apply(&mut conn))
+      .await?;
 
-  // Successful write, do not cleanup written files.
-  if let Some(mut file_manager) = file_manager {
-    file_manager.release().await;
+    // Successful DB write, release files to not be cleaned up.
+    file_manager.release();
 
     tokio::spawn(async move {
       if let Err(err) = delete_files_marked_for_deletion(
@@ -105,7 +104,7 @@ pub async fn update_record_handler(
         log::error!("Failed to delete files: {err}");
       }
     });
-  }
+  };
 
   return Ok(());
 }
