@@ -21,7 +21,7 @@ use crate::email::Mailer;
 use crate::init_error::InitError;
 use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
-use crate::records::file_id::get_or_init_aes256_file_key;
+use crate::records::file_token::get_or_init_aes256_file_key;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::records::{RecordApi, RecordApiByName};
 use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_config};

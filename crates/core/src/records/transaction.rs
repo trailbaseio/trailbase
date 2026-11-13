@@ -11,8 +11,9 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
+use crate::records::file_token::build_file_token_decoder;
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
-use crate::records::params::{ParamOptions, UpdateParams};
+use crate::records::params::{FileTokenDecoder, ParamOptions, UpdateParams};
 use crate::records::queries::{
   DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
 };
@@ -140,19 +141,27 @@ pub async fn record_transactions_handler(
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
             return Err(RecordError::BadRequest("DB mismatch"));
           }
+          let record_id = api.primary_key_to_value(record_id)?;
+
+          let file_token_decoder = if api.has_file_columns() {
+            Some(build_file_token_decoder(
+              state.file_token_key(),
+              api.table_name(),
+            ))
+          } else {
+            None
+          };
 
           let (params, files) = UpdateParams::new(
             &api,
             &state.json_schema_registry().load(),
-            (
-              &api.record_pk_column().column.name,
-              api.primary_key_to_value(record_id)?,
-            ),
+            (&api.record_pk_column().column.name, record_id),
             extract_record(value)?,
             ParamOptions {
               multipart_files: None,
-              // FIXME: pass decoder.
-              file_token_decoder: None,
+              file_token_decoder: file_token_decoder
+                .as_ref()
+                .map(|decoder| decoder as &FileTokenDecoder),
             },
           )
           .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;

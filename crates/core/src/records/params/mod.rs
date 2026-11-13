@@ -133,8 +133,6 @@ impl InsertParams {
       )?);
     }
 
-    // Finally validate all file tokens both from multipart as well as json
-
     return Ok((Self { params }, files));
   }
 
@@ -268,8 +266,6 @@ impl UpdateParams {
         &mut params,
       )?);
     }
-
-    // After collecting all files (multipart + Json) validate tokens.
 
     return Ok((
       Self {
