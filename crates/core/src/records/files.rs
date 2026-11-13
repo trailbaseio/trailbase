@@ -294,18 +294,8 @@ impl FileManager {
     store: &Arc<dyn ObjectStore>,
     files: FileMetadataAndPayload,
   ) -> Result<Self, Vec<FileWriteError>> {
-    let results = join_all(files.into_iter().filter_map(|(metadata, payload)| {
-      // NOTE: The contents may be empty if prior writes are being round-tripped, e.g.
-      // write-after-read.
-      let contents = match payload {
-        Payload::Bytes(contents) => contents,
-        Payload::Id | Payload::Token { .. } => {
-          // Files are already written, nothing to write.
-          return None;
-        }
-      };
-
-      return Some(write_contents(store.clone(), metadata, contents));
+    let results = join_all(files.into_iter().map(|(metadata, payload)| {
+      return write_or_check_file(store.clone(), metadata, payload);
     }))
     .await;
 
@@ -415,21 +405,34 @@ impl Drop for AsyncFileManager {
   }
 }
 
-async fn write_contents(
+async fn write_or_check_file(
   store: Arc<dyn object_store::ObjectStore>,
   metadata: FileUpload,
-  contents: Vec<u8>,
+  payload: Payload,
 ) -> Result<FileUpload, FileWriteError> {
-  let id = metadata.objectstore_id();
-  let path = object_store::path::Path::from(id.to_string());
-
+  let path = object_store::path::Path::from(metadata.objectstore_id().to_string());
   let err = |err: object_store::Error| -> FileWriteError {
     return (path.to_string(), err);
   };
 
-  let mut writer = store.put_multipart(&path).await.map_err(err)?;
-  writer.put_part(contents.into()).await.map_err(err)?;
-  writer.complete().await.map_err(err)?;
+  match payload {
+    Payload::Id | Payload::Token { .. } => {
+      // Existing, already written files are referenced. While we have nothing to write, we gotta
+      // make sure the file exists. The token (or id) may be stale, , e.g. if someone read, dropped
+      // the file and then still used the token.
+      //
+      // FIXME: We don't currently propagate the error to the user.
+      store
+        .head(&path)
+        .await
+        .map_err(|err| (path.to_string(), err))?;
+    }
+    Payload::Bytes(contents) => {
+      let mut writer = store.put_multipart(&path).await.map_err(err)?;
+      writer.put_part(contents.into()).await.map_err(err)?;
+      writer.complete().await.map_err(err)?;
+    }
+  };
 
-  Ok(metadata)
+  return Ok(metadata);
 }
