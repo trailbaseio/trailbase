@@ -455,6 +455,12 @@ fn is_file_column(json: &Option<JsonColumnMetadata>) -> bool {
   return false;
 }
 
+pub fn has_file_columns(column_metadata: &[ColumnMetadata]) -> bool {
+  return column_metadata
+    .iter()
+    .any(|meta| is_file_column(&meta.json));
+}
+
 pub fn find_file_column_indexes(column_metadata: &[ColumnMetadata]) -> Vec<usize> {
   return column_metadata
     .iter()

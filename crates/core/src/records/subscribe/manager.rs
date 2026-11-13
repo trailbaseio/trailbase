@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use trailbase_qs::ValueOrComposite;
 use trailbase_reactive::AsyncReactive;
 
+use crate::aes::KeyType;
 use crate::auth::User;
 use crate::records::RecordError;
 use crate::records::subscribe::event::EventPayload;
@@ -20,10 +21,16 @@ pub struct SubscriptionManager {
 
   /// Manages subscriptions for different connections based on `conn.id()`.
   connections: Arc<RwLock<HashMap</* conn id= */ usize, PerConnectionState>>>,
+
+  /// Key for encrypting opaque file tokens.
+  file_token_key: KeyType,
 }
 
 impl SubscriptionManager {
-  pub fn new(record_apis: AsyncReactive<HashSet<RecordApiByName>>) -> Self {
+  pub fn new(
+    file_token_key: &KeyType,
+    record_apis: AsyncReactive<HashSet<RecordApiByName>>,
+  ) -> Self {
     let connections = Arc::new(RwLock::new(HashMap::new()));
 
     record_apis.add_observer({
@@ -63,6 +70,7 @@ impl SubscriptionManager {
     return Self {
       record_apis,
       connections,
+      file_token_key: *file_token_key,
     };
   }
 
@@ -152,6 +160,7 @@ impl SubscriptionManager {
         Entry::Occupied(v) => v.get().clone(),
         Entry::Vacant(v) => {
           let state = PerConnectionState::new(
+            &self.file_token_key,
             api.conn().clone(),
             api.connection_metadata().clone(),
             filter_record_apis(conn_id, &record_apis),
