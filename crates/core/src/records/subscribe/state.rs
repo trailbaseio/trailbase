@@ -9,10 +9,13 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
-use trailbase_schema::QualifiedName;
-use trailbase_schema::json::record_to_json_expand;
+use trailbase_schema::db::metadata::has_file_columns;
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::json::{FileMetadataSanitizer, record_to_json_expand};
 
+use crate::aes::KeyType;
 use crate::auth::User;
+use crate::records::file_token::build_file_metadata_sanitizer;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
 use crate::records::subscribe::event::{EventError, EventPayload, Record};
 use crate::records::subscribe::hook::{
@@ -168,6 +171,9 @@ struct PerConnectionStateInternal {
   /// exclusively lock the entire map.
   subscriptions: HashMap</* table_name= */ QualifiedName, Subscriptions>,
 
+  /// Key for encrypting opaque file tokens.
+  file_token_key: KeyType,
+
   /// Just a dead-subscriptions buffer to reduce allocations.
   buffer: Vec<usize>,
 }
@@ -209,6 +215,7 @@ pub struct PerConnectionState {
 
 impl PerConnectionState {
   pub fn new(
+    file_token_key: &KeyType,
     conn: trailbase_sqlite::Connection,
     connection_metadata: Arc<ConnectionMetadata>,
     record_apis: HashSet<RecordApiByName>,
@@ -218,6 +225,7 @@ impl PerConnectionState {
       record_apis,
       subscriptions: Default::default(),
       buffer: Default::default(),
+      file_token_key: *file_token_key,
     }));
 
     let weak_hook_handle = Arc::new(WeakHookHandle::new(conn, {
@@ -453,12 +461,27 @@ fn broker(state: &mut PerConnectionStateInternal, event: CommittedEvent) {
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
       .collect();
 
+    // NOTE: We could cache has_file_columns similar to what we do for RecordApis.
+    let file_metadata_sanitizer = if has_file_columns(&table_metadata.column_metadata)
+      && let Some(pk_index) = table_metadata.record_pk_column
+    {
+      Some(build_file_metadata_sanitizer(
+        &state.file_token_key,
+        &QualifiedNameEscaped::new(&table_metadata.schema.name),
+        &record[pk_index].1,
+      ))
+    } else {
+      None
+    };
+
     match record_to_json_expand(
       &table_metadata.column_metadata,
       &[],
       &record,
       None,
-      /* file_metadata_sanitizer= */ None,
+      file_metadata_sanitizer
+        .as_ref()
+        .map(|sanitizer| sanitizer as &FileMetadataSanitizer),
     ) {
       Ok(json_obj) => Arc::new(match action {
         RecordAction::Insert => EventPayload::insert(json_obj, record),

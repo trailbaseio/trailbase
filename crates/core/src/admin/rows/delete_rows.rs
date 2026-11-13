@@ -5,7 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use trailbase_schema::db::metadata::find_file_column_indexes;
+use trailbase_schema::db::metadata::has_file_columns;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -76,15 +76,13 @@ pub(crate) async fn delete_row(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  let has_file_columns = !find_file_column_indexes(&table_metadata.column_metadata).is_empty();
-
   run_delete_query(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::from(&table_metadata.schema.name),
     pk_col,
     pk_value.try_into()?,
-    has_file_columns,
+    has_file_columns(&table_metadata.column_metadata),
   )
   .await?;
 
