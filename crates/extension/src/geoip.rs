@@ -60,7 +60,7 @@ pub fn database_type() -> Option<DatabaseType> {
   return None;
 }
 
-pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> {
+pub(crate) fn geoip_country(context: &mut Context) -> Result<Option<String>, Error> {
   return geoip_extract(context, |reader, client_ip| {
     if let Ok(Some(country)) = reader
       .lookup(client_ip)
@@ -73,7 +73,7 @@ pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> 
   });
 }
 
-fn geoip_city(context: &Context) -> Result<Option<City>, Error> {
+fn geoip_city(context: &mut Context) -> Result<Option<City>, Error> {
   return geoip_extract(context, |reader, client_ip| {
     if let Ok(result) = reader.lookup(client_ip) {
       return result
@@ -87,11 +87,11 @@ fn geoip_city(context: &Context) -> Result<Option<City>, Error> {
   });
 }
 
-pub(crate) fn geoip_city_json(context: &Context) -> Result<Option<String>, Error> {
+pub(crate) fn geoip_city_json(context: &mut Context) -> Result<Option<String>, Error> {
   return Ok(geoip_city(context)?.and_then(|city| serde_json::to_string(&city).ok()));
 }
 
-pub(crate) fn geoip_city_name(context: &Context) -> Result<Option<String>, Error> {
+pub(crate) fn geoip_city_name(context: &mut Context) -> Result<Option<String>, Error> {
   return geoip_extract(context, |reader, client_ip| {
     if let Ok(result) = reader.lookup(client_ip) {
       return result
@@ -107,7 +107,7 @@ pub(crate) fn geoip_city_name(context: &Context) -> Result<Option<String>, Error
 
 #[inline]
 fn geoip_extract<T>(
-  context: &Context,
+  context: &mut Context,
   f: impl Fn(&MaxMindReader, IpAddr) -> Option<T>,
 ) -> Result<Option<T>, Error> {
   if context.len() != 1 {

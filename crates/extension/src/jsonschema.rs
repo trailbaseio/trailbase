@@ -70,7 +70,7 @@ impl JsonSchemaRegistry {
 }
 
 fn jsonschema_by_name_impl(
-  context: &Context,
+  context: &mut Context,
   registry: &JsonSchemaRegistry,
 ) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
@@ -105,7 +105,7 @@ fn jsonschema_by_name_impl(
 }
 
 fn jsonschema_by_name_with_extra_args_impl(
-  context: &Context,
+  context: &mut Context,
   registry: &JsonSchemaRegistry,
 ) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
@@ -142,7 +142,7 @@ fn jsonschema_by_name_with_extra_args_impl(
 /// Cache for json schemas specified in CHECK(jsonschema_matches(...)).
 static SCHEMA_CACHE: LazyLock<Cache<String, Arc<Validator>>> = LazyLock::new(|| Cache::new(256));
 
-fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
+fn jsonschema_matches(context: &mut Context) -> Result<bool, Error> {
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
   let Some(contents) = context.get_raw(1).as_str_or_null()? else {

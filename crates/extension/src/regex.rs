@@ -11,7 +11,7 @@ static CACHE: LazyLock<Cache<String, Regex>> = LazyLock::new(|| Cache::new(256))
 ///
 /// NOTE: Sqlite supports `col REGEXP pattern` in expression, which requires a custom
 /// `regexp(pattern, col)` scalar function to be registered.
-fn regexp(context: &Context) -> Result<bool, Error> {
+fn regexp(context: &mut Context) -> Result<bool, Error> {
   if context.len() != 2 {
     return Err(Error::InvalidParameterCount(context.len(), 2));
   }

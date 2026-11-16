@@ -2,7 +2,7 @@ use rusqlite::Error;
 use rusqlite::functions::{Context, FunctionFlags};
 use validator::ValidateEmail;
 
-fn is_email(context: &Context) -> Result<bool, Error> {
+fn is_email(context: &mut Context) -> Result<bool, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -13,7 +13,7 @@ fn is_email(context: &Context) -> Result<bool, Error> {
   return Ok(true);
 }
 
-fn is_json(context: &Context) -> Result<bool, Error> {
+fn is_json(context: &mut Context) -> Result<bool, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }

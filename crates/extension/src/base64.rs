@@ -14,7 +14,7 @@ use rusqlite::types::{Value, ValueRef};
 ///
 /// Note, however, that this implementation is more strict with respect to b64
 /// text inputs, e.g. it checks the padding.
-fn base64(context: &Context) -> Result<Value> {
+fn base64(context: &mut Context) -> Result<Value> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -32,7 +32,7 @@ fn base64(context: &Context) -> Result<Value> {
           .map_err(|err| Error::UserFunctionError(err.into()))?,
       ))
     }
-    v => Err(Error::InvalidFunctionParameterType(0, v.data_type())),
+    v => Err(Error::InvalidParameterType(0, v.data_type())),
   };
 }
 
@@ -46,7 +46,7 @@ fn base64(context: &Context) -> Result<Value> {
 ///
 /// Note, however, that this implementation is more strict with respect to b64
 /// text inputs, e.g. it checks the padding.
-fn base64_url_safe(context: &Context) -> Result<Value> {
+fn base64_url_safe(context: &mut Context) -> Result<Value> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -64,7 +64,7 @@ fn base64_url_safe(context: &Context) -> Result<Value> {
           .map_err(|err| Error::UserFunctionError(err.into()))?,
       ))
     }
-    v => Err(Error::InvalidFunctionParameterType(0, v.data_type())),
+    v => Err(Error::InvalidParameterType(0, v.data_type())),
   };
 }
 

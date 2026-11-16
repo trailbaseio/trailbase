@@ -6,14 +6,14 @@ use uuid::Uuid;
 /// Checks that argument is a valid UUID blob or null.
 ///
 /// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
-fn is_uuid(context: &Context) -> Result<bool, Error> {
+fn is_uuid(context: &mut Context) -> Result<bool, Error> {
   return Ok(unpack_uuid_or_null(context).is_ok());
 }
 
 /// Checks that argument is a valid UUIDv4 blob or null.
 ///
 /// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
-fn is_uuid_v4(context: &Context) -> Result<bool, Error> {
+fn is_uuid_v4(context: &mut Context) -> Result<bool, Error> {
   return match unpack_uuid_or_null(context) {
     Ok(Some(uuid)) => Ok(uuid.get_version_num() == 4),
     // Null returns true to allow nullable columns.
@@ -25,7 +25,7 @@ fn is_uuid_v4(context: &Context) -> Result<bool, Error> {
 /// Checks that argument is a valid UUIDv7 blob or null.
 ///
 /// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
-fn is_uuid_v7(context: &Context) -> Result<bool, Error> {
+fn is_uuid_v7(context: &mut Context) -> Result<bool, Error> {
   return match unpack_uuid_or_null(context) {
     Ok(Some(uuid)) => Ok(uuid.get_version_num() == 7),
     // Null returns true to allow nullable columns.
@@ -35,17 +35,17 @@ fn is_uuid_v7(context: &Context) -> Result<bool, Error> {
 }
 
 /// Creates a new UUIDv4 blob.
-fn uuid_v4(_context: &Context) -> Result<[u8; 16], Error> {
+fn uuid_v4(_context: &mut Context) -> Result<[u8; 16], Error> {
   return Ok(Uuid::new_v4().into_bytes());
 }
 
 /// Creates a new UUIDv7 blob.
-fn uuid_v7(_context: &Context) -> Result<[u8; 16], Error> {
+fn uuid_v7(_context: &mut Context) -> Result<[u8; 16], Error> {
   return Ok(Uuid::now_v7().into_bytes());
 }
 
 /// Format UUID blob as string-encoded UUID.
-fn uuid_text(context: &Context) -> Result<String, Error> {
+fn uuid_text(context: &mut Context) -> Result<String, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -58,7 +58,7 @@ fn uuid_text(context: &Context) -> Result<String, Error> {
 }
 
 /// Parse UUID from string-encoded UUID.
-fn uuid_parse(context: &Context) -> Result<[u8; 16], Error> {
+fn uuid_parse(context: &mut Context) -> Result<[u8; 16], Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -71,7 +71,7 @@ fn uuid_parse(context: &Context) -> Result<[u8; 16], Error> {
 }
 
 #[inline]
-fn unpack_uuid_or_null(context: &Context<'_>) -> Result<Option<Uuid>, Error> {
+fn unpack_uuid_or_null(context: &mut Context<'_>) -> Result<Option<Uuid>, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }

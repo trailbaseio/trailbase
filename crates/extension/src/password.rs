@@ -78,7 +78,7 @@ pub fn valid_hash(hash: &str) -> bool {
 }
 
 /// An SQLite extension function we can use, e.g. to prefill users from migrations.
-fn hash_password_sqlite(context: &Context) -> Result<String, Error> {
+fn hash_password_sqlite(context: &mut Context) -> Result<String, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }

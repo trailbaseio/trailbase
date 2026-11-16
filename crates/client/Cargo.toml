@@ -27,7 +27,7 @@ eventsource-stream = { version = "0.2.3", default-features = false }
 futures-lite = "2.6.1"
 http = { workspace = true }
 http-body-util = { workspace = true }
-jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
 reqwest = { version = "0.13.5", features = ["stream"] }
 reqwest-websocket = { version = "0.6.0", features = ["json"], optional = true }

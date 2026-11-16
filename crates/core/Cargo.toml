@@ -69,7 +69,7 @@ hyper-util = "0.1.21"
 indexmap = "2.14.2"
 init-tracing-opentelemetry = { version = "0.44.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.61.0", default-features = false }
+jsonschema = { version = "0.61.2", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.1"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
@@ -83,7 +83,7 @@ object_store = { version = "0.14.2", default-features = false, features = ["aws"
 once_cell = "1.21.4"
 parking_lot = { workspace = true }
 pin-project-lite = "0.2.17"
-prost = { version = "^0.14.4", default-features = false }
+prost = { version = "^0.14.6", default-features = false }
 prost-reflect = { version = "^0.16.5", default-features = false, features = ["derive", "text-format"] }
 quick_cache = "0.7.0"
 rand = { workspace = true }
