@@ -170,39 +170,43 @@ describe.concurrent.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     await execute_batch(`${createTableSql};${createTableSql};${countSql}`);
   });
 
-  test("attaching/detaching multi DB", async ({ expect }) => {
-    // Attach db with invalid name fails
-    await expect(async () => await attach("session")).rejects.toThrow();
+  test(
+    "attaching/detaching multi DB",
+    async ({ expect }) => {
+      // Attach db with invalid name fails
+      await expect(async () => await attach("session")).rejects.toThrow();
 
-    const dbName = `db${runtime}`;
-    const tableName = `'${dbName}'.'test'`;
+      const dbName = `db${runtime}`;
+      const tableName = `'${dbName}'.'test'`;
 
-    await attach(dbName);
-    await execute(`DROP TABLE IF EXISTS ${tableName};`);
-    await execute(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY)`);
+      await attach(dbName);
+      await execute(`DROP TABLE IF EXISTS ${tableName};`);
+      await execute(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY)`);
 
-    for (let i = 0; i < 100; ++i) {
-      await execute(
-        `INSERT INTO ${tableName} (id) VALUES (${i * 3 + 0}), (${i * 3 + 1}), (${i * 3 + 2});`,
-      );
-    }
+      for (let i = 0; i < 100; ++i) {
+        await execute(
+          `INSERT INTO ${tableName} (id) VALUES (${i * 3 + 0}), (${i * 3 + 1}), (${i * 3 + 2});`,
+        );
+      }
 
-    await detach(dbName);
-    // Repeat detach fails:
-    await expect(async () => await detach(dbName)).rejects.toThrow();
+      await detach(dbName);
+      // Repeat detach fails:
+      await expect(async () => await detach(dbName)).rejects.toThrow();
 
-    // COUNT fails after detach
-    await expect(
-      async () => await query(`SELECT COUNT(*) FROM ${tableName};`),
-    ).rejects.toThrow();
+      // COUNT fails after detach
+      await expect(
+        async () => await query(`SELECT COUNT(*) FROM ${tableName};`),
+      ).rejects.toThrow();
 
-    // And succeeds after re-attach.
-    await attach(dbName);
-    expect(await query(`SELECT COUNT(*) FROM ${tableName};`)).toEqual("300");
+      // And succeeds after re-attach.
+      await attach(dbName);
+      expect(await query(`SELECT COUNT(*) FROM ${tableName};`)).toEqual("300");
 
-    // Finally detach to not clobber multiple executions.
-    await detach(dbName);
-  }, /* timeout= */ 15000);
+      // Finally detach to not clobber multiple executions.
+      await detach(dbName);
+    },
+    /* timeout= */ 15000,
+  );
 
   test("concurrent query & execute", async ({ expect }) => {
     const responses = await Promise.all(

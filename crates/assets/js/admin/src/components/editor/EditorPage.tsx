@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import type { DefinedUseQueryResult } from "@tanstack/solid-query";
+import type { UseQueryResult } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
 import type {
   ColumnDef,
@@ -134,7 +134,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
 }
 
 function isCached(
-  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>,
+  query: UseQueryResult<ExecutionResult | null | undefined, Error>,
 ): boolean {
   // We currently have two caching systems. Tanstack query and we store results with the scripts :/.
   return !query.isFetchedAfterMount || query.data === undefined;
@@ -142,7 +142,7 @@ function isCached(
 
 function ResultsHeader(props: {
   script: Script;
-  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
+  query: UseQueryResult<ExecutionResult | null | undefined, Error>;
   encoding: BlobEncoding;
   setEncoding: (v: BlobEncoding) => void;
 }) {
@@ -189,7 +189,7 @@ function ResultsHeader(props: {
 
 function ResultComponent(props: {
   script: Script;
-  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
+  query: UseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
   // NOTE: We have two layers of caching :/. From Tanstack and from the scripts.
   const response = () => props.query?.data ?? props.script.result;

@@ -80,13 +80,13 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.40.0",
+    "@bytecodealliance/jco": "^1.42.0",
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.14.0",
-    "prettier": "^3.9.10",
+    "eslint": "^10.15.0",
+    "prettier": "^3.10.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
-    "vite": "^8.3.5",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
     "vite-plugin-dts": "^5.1.2",
     "vitest": "^4.1.12"
   }
