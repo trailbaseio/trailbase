@@ -1,3 +1,13 @@
+## v0.36.0
+
+- Add opaque (encrypted) file tokens to allow file references in partial updates, e.g. add/remove individual files from an `std.FileUploads` column.
+  - Tokens are currently bound to a specific record and column, i.e. you cannot move a file from one column to another. This is something we may want to allow going forward.
+- Provide stronger file write-consistency, i.e. create/update operations will only succeed if files contents are guaranteed to be written and references reference valid files.
+  - Consequently, we had to remove file-support for batch operations and transactions. From an efficiency point-of-view FileUploads are already a lot more costly, thus rending the value of batching questionable. At the same time, keeping transaction open for longer to provide the same guarantees would make for a surprising gotcha.
+  - If this was an important edge case for you, don't hesitate to reach out.
+- Cleanly separate file upload request, response and storage representations.
+- Update Rust and JavaScript dependencies.
+
 ## v0.35.12
 
 - Internal: simplify hook/subscription lifecycle. Subscriptions keep hook alive.
