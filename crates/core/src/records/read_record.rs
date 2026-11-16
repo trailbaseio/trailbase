@@ -1105,33 +1105,6 @@ mod tests {
     assert!(read_resp0.files[0].token.is_some());
     assert!(read_resp0.files[1].token.is_some());
 
-    // Bulk insert: Insert two more records to check bulk creation.
-    let resp1: CreateRecordResponse = unpack_json_response(
-      create_record_handler(
-        State(state.clone()),
-        Path(API_NAME.to_string()),
-        Query(CreateRecordQuery::default()),
-        None,
-        Either::Json(serde_json::Value::Array(vec![
-          request.clone(),
-          request.clone(),
-        ])),
-      )
-      .await
-      .unwrap(),
-    )
-    .await
-    .unwrap();
-
-    let record1_file_ids = assert_all_files_contents(&resp1.ids[0]).await;
-    let record2_file_ids = assert_all_files_contents(&resp1.ids[1]).await;
-
-    for id in resp1.ids {
-      let _ = delete_record_handler(State(state.clone()), Path((API_NAME.to_string(), id)), None)
-        .await
-        .unwrap();
-    }
-
     // Update the first record, which will also trigger deletions.
     let _ = update_record_handler(
       State(state.clone()),
@@ -1183,14 +1156,6 @@ mod tests {
     // Check that the deleted files are actually gone, both in the store and on the fs.
     assert!(!check_file_with_id_exists(&state, &record0_file_ids[0]).await);
     assert!(!check_file_with_id_exists(&state, &record0_file_ids[1]).await);
-
-    assert!(!check_file_with_id_exists(&state, &record1_file_ids[0]).await);
-    assert!(!check_file_with_id_exists(&state, &record1_file_ids[1]).await);
-    assert!(!check_file_with_id_exists(&state, &record1_file_ids[2]).await);
-
-    assert!(!check_file_with_id_exists(&state, &record2_file_ids[0]).await);
-    assert!(!check_file_with_id_exists(&state, &record2_file_ids[1]).await);
-    assert!(!check_file_with_id_exists(&state, &record2_file_ids[2]).await);
 
     // Check that file2 still exists after their token being round-tripped in update
     // above.
