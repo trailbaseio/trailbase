@@ -1,7 +1,6 @@
 use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
-use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::json_schema::FileUploadRequest;
 use trailbase_sqlite::traits::SyncTransaction;
@@ -11,12 +10,12 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
-use crate::records::files::{AsyncFileManager, FileManager, delete_files_marked_for_deletion};
+use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataAndPayload, InsertParams, JsonRow, ParamOptions, ParamsError,
 };
 use crate::records::queries::InsertOrReplaceRecordApiQuery;
-use crate::records::transaction::{Op, OpResult, WriteQuery};
+use crate::records::transaction::{FILES_IN_BATCH_MODE_ERR, Op, OpResult, WriteQuery};
 use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -124,7 +123,7 @@ pub async fn create_record_handler(
       let (record, files) = records_and_files.swap_remove(0);
 
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
-        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+        .map_err(|_err| INVALID_PARAMS_ERR)?;
 
       let query = InsertOrReplaceRecordApiQuery::new(api.clone(), params)?;
       query.check_table_level_access(user.as_ref())?;
@@ -182,18 +181,17 @@ pub async fn create_record_handler(
         .into_iter()
         .map(|(record, files)| -> Result<_, RecordError> {
           let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
-            .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+            .map_err(|_err| INVALID_PARAMS_ERR)?;
+
+          if !files.is_empty() {
+            return Err(FILES_IN_BATCH_MODE_ERR);
+          }
 
           let query = WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?);
 
           Ok(Op {
             api: api.clone(),
             query,
-            file_handling: if files.is_empty() {
-              None
-            } else {
-              Some(AsyncFileManager::new(state.objectstore().clone(), files))
-            },
           })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -210,28 +208,15 @@ pub async fn create_record_handler(
         })
         .await?;
 
-      // TODO: We currently do not trigger file deletions eagerly and rely on periodic cleanup. We may
-      // want to revisit.
-      let results = join_all(op_results.into_iter().map(
-        |op_result| -> BoxFuture<'static, Result<String, RecordError>> {
+      op_results
+        .into_iter()
+        .map(|op_result| -> Result<String, RecordError> {
           return match op_result {
-            OpResult::Ok { id, file_manager } => {
-              if let Some(mut file_manager) = file_manager {
-                return Box::pin(async move {
-                  file_manager.release().await;
-                  return extract_record_id(id);
-                });
-              }
-
-              std::future::ready(extract_record_id(id)).boxed()
-            }
-            OpResult::IgnoredConflict => std::future::ready(Ok("skipped".to_string())).boxed(),
+            OpResult::Ok { id } => extract_record_id(id),
+            OpResult::IgnoredConflict => Ok("skipped".to_string()),
           };
-        },
-      ))
-      .await;
-
-      results.into_iter().collect::<Result<Vec<_>, _>>()?
+        })
+        .collect::<Result<Vec<_>, _>>()?
     }
   };
 
@@ -284,6 +269,8 @@ pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String
     _ => Err(RecordError::Internal("Unexpected data type".into())),
   };
 }
+
+const INVALID_PARAMS_ERR: RecordError = RecordError::BadRequest("Invalid Parameters");
 
 #[cfg(test)]
 mod tests {

@@ -5,11 +5,9 @@ use futures_util::future::join_all;
 use itertools::{Either, Itertools};
 use log::*;
 use object_store::{ObjectStore, ObjectStoreExt};
-use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::task::JoinHandle;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_schema::json_schema::{FileUpload, Payload};
 use trailbase_sqlite::{ConnectionType, params};
@@ -338,68 +336,6 @@ impl Drop for FileManager {
             warn!("Failed to cleanup just written file: {err}");
           }
         }
-      });
-    }
-  }
-}
-
-pub(crate) struct AsyncFileCommitter {
-  commit: Box<dyn FnOnce() + Send>,
-}
-
-impl AsyncFileCommitter {
-  pub(crate) fn start_async_write(self) {
-    let AsyncFileCommitter { commit } = self;
-    commit();
-  }
-}
-
-type AsyncFileManagerResult = Result<FileManager, Vec<FileWriteError>>;
-
-pub(crate) struct AsyncFileManager {
-  written_files: Arc<Mutex<Option<JoinHandle<AsyncFileManagerResult>>>>,
-}
-
-impl AsyncFileManager {
-  pub(crate) fn new(
-    store: Arc<dyn ObjectStore>,
-    files: FileMetadataAndPayload,
-  ) -> (Self, AsyncFileCommitter) {
-    let written_files: Arc<Mutex<Option<JoinHandle<AsyncFileManagerResult>>>> =
-      Arc::new(Mutex::new(None));
-
-    let rt = tokio::runtime::Handle::current();
-    let committer = AsyncFileCommitter {
-      commit: Box::new({
-        let written_files = written_files.clone();
-
-        move || {
-          *written_files.lock() =
-            Some(rt.spawn(async move { FileManager::write(&store, files).await }));
-        }
-      }),
-    };
-
-    return (Self { written_files }, committer);
-  }
-
-  pub(crate) async fn release(&mut self) {
-    let join = std::mem::take(&mut *self.written_files.lock());
-    if let Some(join) = join
-      && let Ok(Ok(mut manager)) = join.await
-    {
-      manager.release();
-    }
-  }
-}
-
-impl Drop for AsyncFileManager {
-  fn drop(&mut self) {
-    if let Some(join) = std::mem::take(&mut *self.written_files.lock()) {
-      tokio::spawn(async move {
-        if let Ok(Ok(manager)) = join.await {
-          drop(manager);
-        };
       });
     }
   }

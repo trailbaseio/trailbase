@@ -1,5 +1,4 @@
 use axum::extract::{Json, State};
-use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
@@ -11,9 +10,7 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
-use crate::records::file_token::build_file_token_decoder;
-use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
-use crate::records::params::{FileTokenDecoder, ParamOptions, UpdateParams};
+use crate::records::params::{ParamOptions, UpdateParams};
 use crate::records::queries::{
   DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
 };
@@ -65,14 +62,10 @@ pub(crate) enum WriteQuery {
 pub(crate) struct Op {
   pub api: RecordApi,
   pub query: WriteQuery,
-  pub file_handling: Option<(AsyncFileManager, AsyncFileCommitter)>,
 }
 
 pub(crate) enum OpResult {
-  Ok {
-    id: trailbase_sqlite::Value,
-    file_manager: Option<AsyncFileManager>,
-  },
+  Ok { id: trailbase_sqlite::Value },
   IgnoredConflict,
 }
 
@@ -114,21 +107,20 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name)?;
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
+            return Err(DB_MISMATCH_ERR);
           }
 
           let (params, files) =
             build_insert_params(&state, &api, user.as_ref(), extract_record(value)?, None)
-              .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+              .map_err(|_err| INVALID_PARAMS_ERR)?;
+
+          if !files.is_empty() {
+            return Err(FILES_IN_BATCH_MODE_ERR);
+          }
 
           Ok(Op {
             query: WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?),
             api,
-            file_handling: if files.is_empty() {
-              None
-            } else {
-              Some(AsyncFileManager::new(state.objectstore().clone(), files))
-            },
           })
         }
         Operation::Update {
@@ -139,41 +131,31 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name)?;
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
+            return Err(DB_MISMATCH_ERR);
           }
-          let record_id = api.primary_key_to_value(record_id)?;
-
-          let file_token_decoder = if api.has_file_columns() {
-            Some(build_file_token_decoder(
-              state.file_token_key(),
-              api.table_name(),
-            ))
-          } else {
-            None
-          };
 
           let (params, files) = UpdateParams::new(
             &api,
             &state.json_schema_registry().load(),
-            (&api.record_pk_column().column.name, record_id),
+            (
+              &api.record_pk_column().column.name,
+              api.primary_key_to_value(record_id)?,
+            ),
             extract_record(value)?,
             ParamOptions {
               multipart_files: None,
-              file_token_decoder: file_token_decoder
-                .as_ref()
-                .map(|decoder| decoder as &FileTokenDecoder),
+              file_token_decoder: None,
             },
           )
-          .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+          .map_err(|_err| INVALID_PARAMS_ERR)?;
+
+          if !files.is_empty() {
+            return Err(FILES_IN_BATCH_MODE_ERR);
+          }
 
           Ok(Op {
             query: WriteQuery::Update(UpdateRecordApiQuery::new(api.clone(), params)?),
             api,
-            file_handling: if files.is_empty() {
-              None
-            } else {
-              Some(AsyncFileManager::new(state.objectstore().clone(), files))
-            },
           })
         }
         Operation::Delete {
@@ -183,7 +165,7 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name)?;
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
+            return Err(DB_MISMATCH_ERR);
           }
 
           Ok(Op {
@@ -192,7 +174,6 @@ pub async fn record_transactions_handler(
               api.primary_key_to_value(record_id)?,
             )?),
             api,
-            file_handling: None,
           })
         }
       };
@@ -219,31 +200,15 @@ pub async fn record_transactions_handler(
       .await?
   };
 
-  // TODO: We currently do not trigger file deletions eagerly and rely on periodic cleanup. We may
-  // want to revisit.
-  let results = join_all(op_results.into_iter().map(
-    |op_result| -> BoxFuture<'static, TransactionResult> {
+  let results = op_results
+    .into_iter()
+    .map(|op_result| -> TransactionResult {
       return match op_result {
-        OpResult::Ok { id, file_manager } => {
-          if let Some(mut file_manager) = file_manager {
-            return Box::pin(async move {
-              file_manager.release().await;
-              return TransactionResult::Id(extract_record_id(id).unwrap_or_default());
-            });
-          }
-
-          std::future::ready(TransactionResult::Id(
-            extract_record_id(id).unwrap_or_default(),
-          ))
-          .boxed()
-        }
-        OpResult::IgnoredConflict => {
-          std::future::ready(TransactionResult::Error("INSERT CONFLICT".into())).boxed()
-        }
+        OpResult::Ok { id } => TransactionResult::Id(extract_record_id(id).unwrap_or_default()),
+        OpResult::IgnoredConflict => TransactionResult::Error("INSERT CONFLICT".into()),
       };
-    },
-  ))
-  .await;
+    })
+    .collect();
 
   return Ok(Json(TransactionResponse { results }));
 }
@@ -284,30 +249,18 @@ pub(crate) fn apply_ops(
   return ops
     .into_iter()
     .map(|op| -> Result<OpResult, RecordError> {
-      let Op {
-        api,
-        query,
-        file_handling,
-      } = op;
+      let Op { api, query } = op;
 
       return match query {
         WriteQuery::Insert(query) => {
           query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
 
-          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
-            file_committer.start_async_write();
-            Some(file_manager)
-          } else {
-            None
-          };
-
           match query.apply(conn) {
             Ok(result) => Ok(OpResult::Ok {
               id: result
                 .pk_value
                 .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
-              file_manager,
             }),
             Err(err) => {
               let conflict_resolution_strategy = api
@@ -329,18 +282,10 @@ pub(crate) fn apply_ops(
           query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
 
-          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
-            file_committer.start_async_write();
-            Some(file_manager)
-          } else {
-            None
-          };
-
           let _result = query.apply(conn)?;
 
           Ok(OpResult::Ok {
             id: query.pk_value(),
-            file_manager,
           })
         }
         WriteQuery::Delete(query) => {
@@ -353,13 +298,27 @@ pub(crate) fn apply_ops(
 
           Ok(OpResult::Ok {
             id: query.pk_value(),
-            file_manager: None,
           })
         }
       };
     })
     .collect();
 }
+
+const DB_MISMATCH_ERR: RecordError = RecordError::BadRequest("DB mismatch");
+const INVALID_PARAMS_ERR: RecordError = RecordError::BadRequest("Invalid Parameters");
+
+/// We cannot support files efficiently (which is the point of batch mode) with strong consistency
+/// in batch mode.
+///
+/// Both in batch and transaction mode, we'd have to await file-write success before committing an
+/// operation, which would not work in transaction mode w/o locking the entire DB for extended
+/// periods. In Batch mode we could break up execution into checking ACLs first, then writing files,
+/// and then committing the DB operations, however ACL checks can depend on prior operations, which
+/// makes this impossible. In either case, one would probably be better off to just submit N
+/// independent operations.
+pub(crate) const FILES_IN_BATCH_MODE_ERR: RecordError =
+  RecordError::BadRequest("Files are not supported in batch-mode/transactions");
 
 #[cfg(test)]
 mod tests {
