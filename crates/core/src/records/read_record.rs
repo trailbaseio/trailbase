@@ -316,8 +316,11 @@ pub fn test_only_validate_api_json_schema(
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use axum::extract::{Path, Query, State};
   use base64::prelude::*;
+  use itertools::Itertools;
   use object_store::ObjectStoreExt;
   use serde::Serialize;
   use serde_json::json;
@@ -1102,8 +1105,14 @@ mod tests {
 
     let read_resp0: PartialResponseSchema = serde_json::from_str(read_resp0.get()).unwrap();
     assert!(read_resp0.file.token.is_some());
-    assert!(read_resp0.files[0].token.is_some());
-    assert!(read_resp0.files[1].token.is_some());
+    let Some((Some(file1_token), Some(file2_token))) = read_resp0
+      .files
+      .into_iter()
+      .map(|f| f.token)
+      .collect_tuple()
+    else {
+      panic!("expected two tokens");
+    };
 
     // Update the first record, which will also trigger deletions.
     let _ = update_record_handler(
@@ -1113,11 +1122,11 @@ mod tests {
       Either::Json(
         json_row_from_value(
           serde_json::to_value(&PartialRequestSchema {
-            // NOTE: We're overriding file1 with the same but fresh data, skipping file1 and
+            // NOTE: We're overriding file0 with the same but fresh data, skipping file1 and
             // round-tripping file2's token.
-            file: FileUploadRequest::Data(file1.clone()),
+            file: FileUploadRequest::Data(file0.clone()),
             files: vec![FileUploadRequest::Token {
-              token: read_resp0.files[1].token.clone().unwrap(),
+              token: file2_token.clone(),
             }],
           })
           .unwrap(),
@@ -1153,6 +1162,31 @@ mod tests {
     // Ok, all pending deletions have been processed:
     assert_eq!(0, pending_deletions.len(), "{pending_deletions:?}");
 
+    // Try to use the stale file token for file1.
+    let stale_result = update_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), resp0.ids[0].clone())),
+      None,
+      Either::Json(
+        json_row_from_value(json!({
+          "files": vec![
+              // Stale token.
+              FileUploadRequest::Token { token: file1_token },
+              // Valid token.
+              FileUploadRequest::Token { token: file2_token }
+          ],
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await;
+
+    assert_matches!(
+      stale_result.err(),
+      Some(RecordError::BadRequest("stale file token"))
+    );
+
     // Check that the deleted files are actually gone, both in the store and on the fs.
     assert!(!check_file_with_id_exists(&state, &record0_file_ids[0]).await);
     assert!(!check_file_with_id_exists(&state, &record0_file_ids[1]).await);
@@ -1172,7 +1206,7 @@ mod tests {
       Ok(_) => true,
       Err(object_store::Error::NotFound { .. }) => false,
       Err(err) => {
-        panic!("unexpedted objectore error: {err}");
+        panic!("unexpected object-store error: {err}");
       }
     };
 

@@ -79,9 +79,16 @@ impl From<trailbase_sqlite::from_sql::FromSqlError> for RecordError {
   }
 }
 
-impl From<Vec<crate::records::files::FileWriteError>> for RecordError {
-  fn from(err: Vec<crate::records::files::FileWriteError>) -> Self {
-    return RecordError::Internal(format!("{err:?}").into());
+impl From<crate::records::files::FileWriteError> for RecordError {
+  fn from(err: crate::records::files::FileWriteError) -> Self {
+    return match err {
+      crate::records::files::FileWriteError::StaleToken => {
+        RecordError::BadRequest("stale file token")
+      }
+      crate::records::files::FileWriteError::Storage(_uuid, err) => {
+        RecordError::Internal(format!("{err:?}").into())
+      }
+    };
   }
 }
 

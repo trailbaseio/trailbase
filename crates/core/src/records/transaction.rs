@@ -315,8 +315,13 @@ const INVALID_PARAMS_ERR: RecordError = RecordError::BadRequest("Invalid Paramet
 /// operation, which would not work in transaction mode w/o locking the entire DB for extended
 /// periods. In Batch mode we could break up execution into checking ACLs first, then writing files,
 /// and then committing the DB operations, however ACL checks can depend on prior operations, which
-/// makes this impossible. In either case, one would probably be better off to just submit N
-/// independent operations.
+/// makes this impossible.
+///
+/// We could also be more optimistic, e.g. disallow only tokens and "hope" content writes will go
+/// through (e.g. no disk space or permission issues), however this may lead to invalid file
+/// references and hard-to-debug issues.
+///
+/// In the end, one is probably be better off to just submit N independent operations.
 pub(crate) const FILES_IN_BATCH_MODE_ERR: RecordError =
   RecordError::BadRequest("Files are not supported in batch-mode/transactions");
 
