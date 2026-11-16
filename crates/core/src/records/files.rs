@@ -7,7 +7,6 @@ use log::*;
 use object_store::{ObjectStore, ObjectStoreExt};
 use std::collections::HashSet;
 use std::sync::Arc;
-use thiserror::Error;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_schema::json_schema::{FileUpload, Payload};
 use trailbase_sqlite::{ConnectionType, params};
@@ -15,15 +14,15 @@ use trailbase_sqlite::{ConnectionType, params};
 use crate::app_state::AppState;
 use crate::records::params::FileMetadataAndPayload;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum FileError {
-  #[error("Storage error: {0}")]
+  #[error("Storage: {0}")]
   Storage(#[from] object_store::Error),
-  #[error("IO error: {0}")]
+  #[error("IO: {0}")]
   IO(#[from] std::io::Error),
-  #[error("Json serialization error: {0}")]
-  JsonSerialization(#[from] serde_json::Error),
-  #[error("SQL error: {0}")]
+  #[error("Json: {0}")]
+  Json(#[from] serde_json::Error),
+  #[error("SQL: {0}")]
   Sql(#[from] trailbase_sqlite::Error),
 }
 
@@ -280,7 +279,13 @@ pub(crate) async fn delete_pending_files_impl(
   return Ok(());
 }
 
-pub type FileWriteError = (String, object_store::Error);
+#[derive(Debug, thiserror::Error)]
+pub enum FileWriteError {
+  #[error("Storage: {0}")]
+  Storage(uuid::Uuid, object_store::Error),
+  #[error("StaleToken")]
+  StaleToken,
+}
 
 pub(crate) struct FileManager {
   store: Arc<dyn ObjectStore>,
@@ -291,23 +296,23 @@ impl FileManager {
   pub(crate) async fn write(
     store: &Arc<dyn ObjectStore>,
     files: FileMetadataAndPayload,
-  ) -> Result<Self, Vec<FileWriteError>> {
+  ) -> Result<Self, FileWriteError> {
     let results = join_all(files.into_iter().map(|(metadata, payload)| {
       return write_or_check_file(store.clone(), metadata, payload);
     }))
     .await;
 
-    let (written_files, errs): (Vec<FileUpload>, Vec<FileWriteError>) =
+    let (written_files, mut errs): (Vec<Option<FileUpload>>, Vec<FileWriteError>) =
       results.into_iter().partition_map(|r| match r {
         Ok(v) => Either::Left(v),
         Err(e) => Either::Right(e),
       });
 
-    // NOTE: we don't do any clean-up for write failures, i.e. the DB may reference files that
-    // cannot be found later. This may just be ok resulting in subsequent NOT_FOUND :shrug:.
-    // We could retry or eventually unwind the DB write.
-    if written_files.is_empty() && !errs.is_empty() {
-      return Err(errs);
+    let written_files = written_files.into_iter().flatten().collect();
+
+    if !errs.is_empty() {
+      clean_up_written_files_async(store, written_files);
+      return Err(errs.swap_remove(0));
     }
 
     return Ok(Self {
@@ -324,51 +329,59 @@ impl FileManager {
 
 impl Drop for FileManager {
   fn drop(&mut self) {
-    let written_files = std::mem::take(&mut self.written_files);
-
-    if !written_files.is_empty() {
-      let store = self.store.clone();
-
-      tokio::spawn(async move {
-        for file in written_files {
-          let path = object_store::path::Path::from(file.objectstore_id().to_string());
-          if let Err(err) = store.delete(&path).await {
-            warn!("Failed to cleanup just written file: {err}");
-          }
-        }
-      });
-    }
+    // Unless files were explicitly released, clean up all written files.
+    clean_up_written_files_async(&self.store, std::mem::take(&mut self.written_files));
   }
+}
+
+fn clean_up_written_files_async(store: &Arc<dyn ObjectStore>, written_files: Vec<FileUpload>) {
+  if written_files.is_empty() {
+    return;
+  }
+
+  tokio::spawn({
+    let store = store.clone();
+
+    async move {
+      for file in written_files {
+        let path = object_store::path::Path::from(file.objectstore_id().to_string());
+        if let Err(err) = store.delete(&path).await {
+          warn!("Failed to cleanup just written file: {err}");
+        }
+      }
+    }
+  });
 }
 
 async fn write_or_check_file(
   store: Arc<dyn object_store::ObjectStore>,
   metadata: FileUpload,
   payload: Payload,
-) -> Result<FileUpload, FileWriteError> {
+) -> Result<Option<FileUpload>, FileWriteError> {
   let path = object_store::path::Path::from(metadata.objectstore_id().to_string());
-  let err = |err: object_store::Error| -> FileWriteError {
-    return (path.to_string(), err);
-  };
 
-  match payload {
+  return match payload {
     Payload::Id | Payload::Token { .. } => {
       // Existing, already written files are referenced. While we have nothing to write, we gotta
       // make sure the file exists. The token (or id) may be stale, , e.g. if someone read, dropped
       // the file and then still used the token.
-      //
-      // FIXME: We don't currently propagate the error to the user.
       store
         .head(&path)
         .await
-        .map_err(|err| (path.to_string(), err))?;
+        .map_err(|_| FileWriteError::StaleToken)?;
+
+      Ok(None)
     }
     Payload::Bytes(contents) => {
+      let err = |err: object_store::Error| -> FileWriteError {
+        return FileWriteError::Storage(*metadata.objectstore_id(), err);
+      };
+
       let mut writer = store.put_multipart(&path).await.map_err(err)?;
       writer.put_part(contents.into()).await.map_err(err)?;
       writer.complete().await.map_err(err)?;
+
+      Ok(Some(metadata))
     }
   };
-
-  return Ok(metadata);
 }
