@@ -1,4 +1,5 @@
 import { createEffect, onCleanup } from "solid-js";
+import { persistentJSON } from "@nanostores/persistent";
 
 import {
   Graph,
@@ -68,13 +69,19 @@ function layoutErdNodes(nodes: NodeMetadata[], aspect: number): NodeMetadata[] {
     Math.ceil(Math.sqrt((safeAspect * nodes.length * height) / width)),
   );
 
-  return nodes.map((node, index) => ({
-    ...node,
-    position: node.position ?? {
-      x: (index % columns) * width,
-      y: Math.floor(index / columns) * height,
-    },
-  }));
+  return nodes.map((node, index) => {
+    const id = node.id;
+    const storedProps = id ? $layout.get().get(id) : undefined;
+
+    return {
+      ...node,
+      position: node.position ??
+        storedProps?.position ?? {
+          x: (index % columns) * width,
+          y: Math.floor(index / columns) * height,
+        },
+    } satisfies NodeMetadata;
+  });
 }
 
 export function edgeProperties(opts?: {
@@ -233,6 +240,15 @@ export function ErdGraph(props: {
     g.on("node:click", ({ node }) => onSelect(node.id));
     g.on("blank:click", () => onSelect(undefined));
 
+    g.on("node:moved", ({ node }) => {
+      const id = node.id;
+      if (id) {
+        $layout.get().set(id, {
+          position: node.getPosition(),
+        });
+      }
+    });
+
     if (g.getCells().length) {
       g.zoomToFit({ padding: 20 });
     }
@@ -267,6 +283,8 @@ export function ErdGraph(props: {
       zoomOut: () => g.zoomTo(g.zoom() / 2),
       fit: () => g.zoomToFit({ padding: 20 }),
       reset: () => {
+        $layout.set(new Map());
+
         layoutErdNodes(props.nodes, graphAspect(ref)).forEach((node, index) => {
           const position = node.position;
           if (position) {
@@ -396,3 +414,15 @@ function graphAspect(el: HTMLElement | undefined) {
     );
   }
 })();
+
+type StoredNodeMetadata = {
+  position?: {
+    x: number;
+    y: number;
+  };
+};
+
+const $layout = persistentJSON<Map<string, StoredNodeMetadata>>(
+  "erd:layout",
+  new Map(),
+);
