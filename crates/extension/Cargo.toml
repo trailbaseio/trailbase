@@ -19,7 +19,7 @@ bcrypt = "0.19.3"
 jsonschema = { version = "0.61.2", default-features = false }
 maxminddb = "0.33.0"
 quick_cache = { version = "0.7.0", default-features = false }
-regex = "1.13.1"
+regex = "1.13.2"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.
 rusqlite = { version = "0.43.0", default-features = false, features = ["functions", "cache"] }
 serde = { workspace = true }

@@ -24,7 +24,7 @@ lazy_static = "1.5.1"
 log = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
-regex = "1.13.1"
+regex = "1.13.2"
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

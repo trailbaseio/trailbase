@@ -24,14 +24,14 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 compact_str = { workspace = true }
 clap = { workspace = true }
-clap_complete = { version = "4.6.11", features = ["unstable-dynamic"] }
+clap_complete = { version = "4.6.12", features = ["unstable-dynamic"] }
 env_logger = { workspace = true }
 itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
 log = { workspace = true }
 mimalloc = { workspace = true }
 reqwest = { workspace = true }
-rmcp = { version = "^3.10.0", default-features = false, features = ["server", "transport-io"], optional = true }
+rmcp = { version = "^3.11.0", default-features = false, features = ["server", "transport-io"], optional = true }
 rmcp-openapi = { workspace = true, optional = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }

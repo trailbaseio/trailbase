@@ -11,7 +11,7 @@ readme = "../../README.md"
 [dependencies]
 anyhow = "1.0.104"
 base64 = { workspace = true }
-bytes = { version = "1.12.1", default-features = false }
+bytes = { version = "1.12.2", default-features = false }
 futures-util = { workspace = true }
 http = { workspace = true }
 log = { workspace = true }
