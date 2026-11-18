@@ -1481,13 +1481,15 @@ mod tests {
           CREATE TABLE parent (
             pk           INTEGER PRIMARY KEY NOT NULL,
             value        TEXT NOT NULL,
-            other        TEXT NOT NULL
+            other        TEXT NOT NULL,
+            _secret      TEXT NOT NULL DEFAULT 'secret'
           ) {strict};
           INSERT INTO parent (pk, value, other) VALUES (1, 'first', '1st'), (2, 'second', '2nd');
 
           CREATE TABLE child (
             id           INTEGER PRIMARY KEY NOT NULL,
-            parent       INTEGER REFERENCES parent NOT NULL
+            parent       INTEGER REFERENCES parent NOT NULL,
+            _secret      TEXT NOT NULL DEFAULT 'secret'
           ) {strict};
           INSERT INTO child (id, parent) VALUES (1, 1), (2, 2);
 
@@ -1566,6 +1568,16 @@ mod tests {
     .unwrap();
 
     let obj = to_object(&obj);
+
+    // Make sure underscore columns are skipped in child and expanded parent record.
+    assert!(!obj.contains_key("_secret"));
+    if let Some(serde_json::Value::Object(parent)) = obj.get("parent")
+      && let Some(serde_json::Value::Object(data)) = &&parent.get("data")
+    {
+      assert!(!data.contains_key("secret"));
+    } else {
+      panic!("expected parent's data");
+    };
 
     assert_eq!(serde_json::Value::Object(obj), expected);
   }
