@@ -40,7 +40,8 @@ async fn test_without_spa_fallback() {
       .unwrap();
 
   let (_address, router) = main_router;
-  let server = TestServer::new(router);
+  let server =
+    TestServer::new(router.into_make_service_with_connect_info::<std::net::SocketAddr>());
 
   // Existing file should be served
   let response = server.get("/index.html").await;

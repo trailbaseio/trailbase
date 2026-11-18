@@ -15,7 +15,6 @@ use trailbase_sqlite::SyncConnectionTrait;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::extract::ip::extract_ip;
 use crate::util::get_header;
 
 // NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
@@ -159,7 +158,10 @@ const EVENT_NAME: &str = "http_event";
 pub(crate) const EVENT_TARGET: &str = "http_target";
 pub(crate) const LEVEL: Level = Level::INFO;
 
-pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
+pub(super) fn sqlite_logger_make_span(
+  ip_extractor: &crate::extract::ip::IpExtractor,
+  request: &Request<Body>,
+) -> Span {
   let headers = request.headers();
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
@@ -171,7 +173,7 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
       uri = %request.uri(),
       version = ?request.version(),
       host = get_header(headers, "host"),
-      client_ip = extract_ip(request).map(|ip| ip.to_string()),
+      client_ip = ip_extractor.extract_ip(request).map(|ip| ip.to_string()),
       user_agent = get_header(headers, "user-agent"),
       referer = get_header(headers, "referer"),
       // Reserve placeholders that may be recorded later.

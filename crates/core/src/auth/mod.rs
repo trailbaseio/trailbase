@@ -28,7 +28,7 @@ use utoipa_axum::router::OpenApiRouter;
 use crate::AppState;
 use crate::config::proto;
 use crate::constants::AUTH_API_PATH;
-use crate::extract::ip::RealIpKeyExtractor;
+use crate::extract::ip::IpExtractor;
 
 /// Signals whether the server as a GET "/" route. Useful for redirects after auth actions.
 #[derive(Clone)]
@@ -121,7 +121,10 @@ pub(super) fn auth_router(
   // works correctly.
   return OpenApiRouter::new().nest(&format!("/{AUTH_API_PATH}/"), {
     if let Some(rate_limit) = rate_limit(config, dev_mode) {
-      router.layer(GovernorLayer::new(build_shared_governor_conf(rate_limit)))
+      router.layer(GovernorLayer::new(build_shared_governor_conf(
+        config.server.proxy.as_ref(),
+        rate_limit,
+      )))
     } else {
       router
     }
@@ -144,7 +147,10 @@ pub(super) fn admin_auth_router(config: &proto::Config, dev_mode: bool) -> OpenA
 
   return OpenApiRouter::new().nest(&format!("/{AUTH_API_PATH}/"), {
     if let Some(rate_limit) = rate_limit(config, dev_mode) {
-      router.layer(GovernorLayer::new(build_shared_governor_conf(rate_limit)))
+      router.layer(GovernorLayer::new(build_shared_governor_conf(
+        config.server.proxy.as_ref(),
+        rate_limit,
+      )))
     } else {
       router
     }
@@ -165,10 +171,12 @@ fn rate_limit(config: &proto::Config, dev_mode: bool) -> Option<u32> {
   return None;
 }
 
-type Governor =
-  GovernorConfig<RealIpKeyExtractor, governor::middleware::StateInformationMiddleware>;
+type Governor = GovernorConfig<IpExtractor, governor::middleware::StateInformationMiddleware>;
 
-fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
+fn build_shared_governor_conf(
+  proxy_config: Option<&proto::ProxyConfig>,
+  rate_limit: u32,
+) -> Arc<Governor> {
   static GOVERNOR_CONF: OnceLock<Arc<Governor>> = OnceLock::new();
 
   let governor_conf = GOVERNOR_CONF.get_or_init(|| {
@@ -178,7 +186,7 @@ fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
         .burst_size(rate_limit)
         // Replenish one after 1 seconds.
         .per_second(1)
-        .key_extractor(RealIpKeyExtractor)
+        .key_extractor(IpExtractor::new(proxy_config))
         // Set rate limiting headers on reply.
         .use_headers()
         // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited

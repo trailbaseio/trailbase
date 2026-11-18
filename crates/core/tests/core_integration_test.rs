@@ -150,7 +150,8 @@ async fn lifecycle_record_api_and_logs_integration_tests() {
   let client_ip = "22.11.22.11";
 
   {
-    let server = TestServer::new(router);
+    let server =
+      TestServer::new(router.into_make_service_with_connect_info::<std::net::SocketAddr>());
 
     #[cfg(feature = "otel")]
     {

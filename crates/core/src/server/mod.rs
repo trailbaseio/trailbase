@@ -471,13 +471,16 @@ impl Server {
       .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer)
       .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
 
+    let ip_extractor =
+      crate::extract::ip::IpExtractor::new(state.get_config().server.proxy.as_ref());
+
     return router
       .layer(CookieManagerLayer::new())
       .layer(build_cors(cors_allowed_origins, state.dev_mode()))
       .layer(
         // This declares: **what information** is logged at what level in to events and spans.
         TraceLayer::new_for_http()
-          .make_span_with(logging::sqlite_logger_make_span)
+          .make_span_with(move |req: &Request| logging::sqlite_logger_make_span(&ip_extractor, req))
           .on_request(logging::sqlite_logger_on_request)
           .on_response(logging::sqlite_logger_on_response),
       )

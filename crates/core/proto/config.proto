@@ -167,6 +167,40 @@ message AuthConfig {
   optional string apple_native_client_id = 32;
 }
 
+// Tells the server which proxy-provided header to extract the client-ip from.
+enum ProxyClientIpHeader {
+  // Try extracting the IP from any of the below sources. This is useful for
+  // getting started but does allow client's to forge an IP and thus spoof your
+  // logs and circumvent any rate limiting. Make sure to set up your proxy
+  // config properly for production use.
+  PROXY_CLIENT_IP_HEADER_UNDEFINED = 0;
+  // No proxy: use peer's IP.
+  NONE = 1;
+  // Forward chain provided by trusted reverse proxy (make sure proxy appends).
+  // Will take right-most trusted IP. If your setup contains multiple proxies,
+  // make sure to add them to the `trusted_proxies` list.
+  X_FORWARDED_FOR = 2;
+  // Single IP provided by trusted reverse proxy (make sure proxy overrides).
+  X_REAL_IP = 3;
+  // Used e.g. by CloudFlare enterprise.
+  TRUE_CLIENT_IP = 11;
+  // CloudFlare's connecting IP.
+  CF_CONNECTING_IP = 12;
+  // Fly's client ip header.
+  FLY_CLIENT_IP = 13;
+  // AWS' cloudfront.
+  CLOUDFRONT_VIEWER_ADDRESS =  14;
+}
+
+// Configuration for trusted (reverse-)proxies in front of the TrailBase server.
+message ProxyConfig {
+  // Tells the server which proxy-provided header to extract the client-ip from.
+  optional ProxyClientIpHeader client_ip_header = 1;
+
+  // List of trusted proxies to pop right-to-left from `X-Forwarded-For` chain.
+  repeated string trusted_proxies = 2;
+}
+
 message S3StorageConfig {
   optional string endpoint = 1;
   optional string region = 2;
@@ -187,6 +221,9 @@ message ServerConfig {
   // Your final, deployed URL. This url is used to build canonical urls
   // for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
   optional string site_url = 2;
+
+  // Controls IP extraction, e.g. for logging and rate limiting.
+  optional ProxyConfig proxy = 3;
 
   //  Max age of logs that will be retained during period logs cleanup. Note
   //  that this implies that some older logs may persist until the cleanup job

@@ -41,7 +41,11 @@ fn test_admin_permissions() {
     assert!(admin_router.is_none());
     assert!(tls.is_none());
 
-    let server = TestServer::new(main_router.1);
+    let server = TestServer::new(
+      main_router
+        .1
+        .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    );
 
     assert_eq!(
       server.get("/api/healthcheck").await.status_code(),

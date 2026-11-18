@@ -218,6 +218,93 @@ export function userIdentifierToJSON(object: UserIdentifier): string {
   }
 }
 
+/** Tells the server which proxy-provided header to extract the client-ip from. */
+export enum ProxyClientIpHeader {
+  /**
+   * PROXY_CLIENT_IP_HEADER_UNDEFINED - Try extracting the IP from any of the below sources. This is useful for
+   * getting started but does allow client's to forge an IP and thus spoof your
+   * logs and circumvent any rate limiting. Make sure to set up your proxy
+   * config properly for production use.
+   */
+  PROXY_CLIENT_IP_HEADER_UNDEFINED = 0,
+  /** NONE - No proxy: use peer's IP. */
+  NONE = 1,
+  /**
+   * X_FORWARDED_FOR - Forward chain provided by trusted reverse proxy (make sure proxy appends).
+   * Will take right-most trusted IP. If your setup contains multiple proxies,
+   * make sure to add them to the `trusted_proxies` list.
+   */
+  X_FORWARDED_FOR = 2,
+  /** X_REAL_IP - Single IP provided by trusted reverse proxy (make sure proxy overrides). */
+  X_REAL_IP = 3,
+  /** TRUE_CLIENT_IP - Used e.g. by CloudFlare enterprise. */
+  TRUE_CLIENT_IP = 11,
+  /** CF_CONNECTING_IP - CloudFlare's connecting IP. */
+  CF_CONNECTING_IP = 12,
+  /** FLY_CLIENT_IP - Fly's client ip header. */
+  FLY_CLIENT_IP = 13,
+  /** CLOUDFRONT_VIEWER_ADDRESS - AWS' cloudfront. */
+  CLOUDFRONT_VIEWER_ADDRESS = 14,
+  UNRECOGNIZED = -1,
+}
+
+export function proxyClientIpHeaderFromJSON(object: any): ProxyClientIpHeader {
+  switch (object) {
+    case 0:
+    case "PROXY_CLIENT_IP_HEADER_UNDEFINED":
+      return ProxyClientIpHeader.PROXY_CLIENT_IP_HEADER_UNDEFINED;
+    case 1:
+    case "NONE":
+      return ProxyClientIpHeader.NONE;
+    case 2:
+    case "X_FORWARDED_FOR":
+      return ProxyClientIpHeader.X_FORWARDED_FOR;
+    case 3:
+    case "X_REAL_IP":
+      return ProxyClientIpHeader.X_REAL_IP;
+    case 11:
+    case "TRUE_CLIENT_IP":
+      return ProxyClientIpHeader.TRUE_CLIENT_IP;
+    case 12:
+    case "CF_CONNECTING_IP":
+      return ProxyClientIpHeader.CF_CONNECTING_IP;
+    case 13:
+    case "FLY_CLIENT_IP":
+      return ProxyClientIpHeader.FLY_CLIENT_IP;
+    case 14:
+    case "CLOUDFRONT_VIEWER_ADDRESS":
+      return ProxyClientIpHeader.CLOUDFRONT_VIEWER_ADDRESS;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ProxyClientIpHeader.UNRECOGNIZED;
+  }
+}
+
+export function proxyClientIpHeaderToJSON(object: ProxyClientIpHeader): string {
+  switch (object) {
+    case ProxyClientIpHeader.PROXY_CLIENT_IP_HEADER_UNDEFINED:
+      return "PROXY_CLIENT_IP_HEADER_UNDEFINED";
+    case ProxyClientIpHeader.NONE:
+      return "NONE";
+    case ProxyClientIpHeader.X_FORWARDED_FOR:
+      return "X_FORWARDED_FOR";
+    case ProxyClientIpHeader.X_REAL_IP:
+      return "X_REAL_IP";
+    case ProxyClientIpHeader.TRUE_CLIENT_IP:
+      return "TRUE_CLIENT_IP";
+    case ProxyClientIpHeader.CF_CONNECTING_IP:
+      return "CF_CONNECTING_IP";
+    case ProxyClientIpHeader.FLY_CLIENT_IP:
+      return "FLY_CLIENT_IP";
+    case ProxyClientIpHeader.CLOUDFRONT_VIEWER_ADDRESS:
+      return "CLOUDFRONT_VIEWER_ADDRESS";
+    case ProxyClientIpHeader.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 export enum SystemJobId {
   SYSTEM_JOB_ID_UNDEFINED = 0,
   BACKUP = 1,
@@ -556,6 +643,16 @@ export interface AuthConfig_OauthProvidersEntry {
   value: OAuthProviderConfig | undefined;
 }
 
+/** Configuration for trusted (reverse-)proxies in front of the TrailBase server. */
+export interface ProxyConfig {
+  /** Tells the server which proxy-provided header to extract the client-ip from. */
+  clientIpHeader?:
+    | ProxyClientIpHeader
+    | undefined;
+  /** List of trusted proxies to pop right-to-left from `X-Forwarded-For` chain. */
+  trustedProxies: string[];
+}
+
 export interface S3StorageConfig {
   endpoint?: string | undefined;
   region?: string | undefined;
@@ -584,6 +681,10 @@ export interface ServerConfig {
    */
   siteUrl?:
     | string
+    | undefined;
+  /** Controls IP extraction, e.g. for logging and rate limiting. */
+  proxy?:
+    | ProxyConfig
     | undefined;
   /**
    * Max age of logs that will be retained during period logs cleanup. Note
@@ -1855,6 +1956,99 @@ export const AuthConfig_OauthProvidersEntry: MessageFns<AuthConfig_OauthProvider
   },
 };
 
+function createBaseProxyConfig(): ProxyConfig {
+  return { trustedProxies: [] };
+}
+
+export const ProxyConfig: MessageFns<ProxyConfig> = {
+  encode(message: ProxyConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.clientIpHeader !== undefined && message.clientIpHeader !== 0) {
+      writer.uint32(8).int32(message.clientIpHeader);
+    }
+    for (const v of message.trustedProxies) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProxyConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProxyConfig();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.clientIpHeader = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.trustedProxies.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProxyConfig {
+    return {
+      clientIpHeader: isSet(object.clientIpHeader)
+        ? proxyClientIpHeaderFromJSON(object.clientIpHeader)
+        : isSet(object.client_ip_header)
+        ? proxyClientIpHeaderFromJSON(object.client_ip_header)
+        : undefined,
+      trustedProxies: globalThis.Array.isArray(object?.trustedProxies)
+        ? object.trustedProxies.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.trusted_proxies)
+        ? object.trusted_proxies.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ProxyConfig): unknown {
+    const obj: any = {};
+    if (message.clientIpHeader !== undefined && message.clientIpHeader !== 0) {
+      obj.clientIpHeader = proxyClientIpHeaderToJSON(message.clientIpHeader);
+    }
+    if (message.trustedProxies?.length) {
+      obj.trustedProxies = message.trustedProxies;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ProxyConfig>, I>>(base?: I): ProxyConfig {
+    return ProxyConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProxyConfig>, I>>(object: I): ProxyConfig {
+    const message = createBaseProxyConfig();
+    message.clientIpHeader = object.clientIpHeader ?? 0;
+    message.trustedProxies = object.trustedProxies?.map((e) => e) || [];
+    return message;
+  },
+};
+
 function createBaseS3StorageConfig(): S3StorageConfig {
   return {};
 }
@@ -2012,6 +2206,9 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.siteUrl !== undefined && message.siteUrl !== "") {
       writer.uint32(18).string(message.siteUrl);
     }
+    if (message.proxy !== undefined) {
+      ProxyConfig.encode(message.proxy, writer.uint32(26).fork()).join();
+    }
     if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0n) {
       if (BigInt.asIntN(64, message.logsRetentionSec) !== message.logsRetentionSec) {
         throw new globalThis.Error("value provided for field message.logsRetentionSec of type int64 too large");
@@ -2069,6 +2266,14 @@ export const ServerConfig: MessageFns<ServerConfig> = {
             }
 
             message.siteUrl = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.proxy = ProxyConfig.decode(reader, reader.uint32());
             continue;
           }
           case 11: {
@@ -2143,6 +2348,7 @@ export const ServerConfig: MessageFns<ServerConfig> = {
         : isSet(object.site_url)
         ? globalThis.String(object.site_url)
         : undefined,
+      proxy: isSet(object.proxy) ? ProxyConfig.fromJSON(object.proxy) : undefined,
       logsRetentionSec: isSet(object.logsRetentionSec)
         ? BigInt(object.logsRetentionSec)
         : isSet(object.logs_retention_sec)
@@ -2184,6 +2390,9 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.siteUrl !== undefined && message.siteUrl !== "") {
       obj.siteUrl = message.siteUrl;
     }
+    if (message.proxy !== undefined) {
+      obj.proxy = ProxyConfig.toJSON(message.proxy);
+    }
     if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0n) {
       obj.logsRetentionSec = message.logsRetentionSec.toString();
     }
@@ -2212,6 +2421,9 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     const message = createBaseServerConfig();
     message.applicationName = object.applicationName ?? "";
     message.siteUrl = object.siteUrl ?? "";
+    message.proxy = (object.proxy !== undefined && object.proxy !== null)
+      ? ProxyConfig.fromPartial(object.proxy)
+      : undefined;
     message.logsRetentionSec = (object.logsRetentionSec !== undefined && object.logsRetentionSec !== null)
       ? BigInt(object.logsRetentionSec)
       : 0n;
