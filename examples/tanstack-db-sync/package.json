@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@tanstack/db": "^1.0.0-rc.1.5",
-    "@tanstack/query-core": "^5.107.1",
+    "@tanstack/query-core": "^5.107.2",
     "@tanstack/query-db-collection": "^1.5.2",
     "@tanstack/react-db": "^1.0.0-rc.1.5",
     "@tanstack/trailbase-db-collection": "^1.0.0-rc.1.5",
@@ -31,12 +31,12 @@
     "@vitejs/plugin-react": "^6.3.0",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.7",
+    "eslint-plugin-react-refresh": "^0.5.8",
     "globals": "^17.14.0",
     "prettier": "^3.10.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.2",
+    "typescript-eslint": "^8.73.0",
     "vite": "^8.3.8"
   }
 }

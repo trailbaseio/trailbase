@@ -32,5 +32,5 @@ overrides:
   form-data@>=4.0.0 <4.0.6: ^4.0.6
 auditConfig:
   ignoreGhsas: [
-    # - GHSA-ch52-4w7c-c8xp  # example
+    "GHSA-fc5q-39xc-vjpf", # picomatch: used for offline mdx parsing in startlight website.
   ]
