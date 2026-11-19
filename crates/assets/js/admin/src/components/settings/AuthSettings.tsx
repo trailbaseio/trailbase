@@ -48,6 +48,7 @@ import {
   OAuthProviderConfig,
   OAuthProviderId,
   UserIdentifier,
+  oAuthProviderIdFromJSON,
 } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { adminFetch } from "@/lib/fetch";
@@ -142,7 +143,7 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
 
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = OAuthProviderConfig.fromPartial({
-        providerId: p.id,
+        providerId: oAuthProviderIdFromJSON(p.id),
 
         ...entry.state,
       });
@@ -214,7 +215,7 @@ function ProviderSettingsSubForm(props: {
           <div class="flex items-center gap-2">
             <img
               class="size-[24px]"
-              src={assets.get(props.provider.id)}
+              src={assets.get(oAuthProviderIdFromJSON(props.provider.id))}
               alt={props.provider.display_name}
             />
             <span>{props.provider.display_name}</span>

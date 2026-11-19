@@ -66,6 +66,7 @@ import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
+import { oAuthProviderIdFromJSON } from "@proto/config";
 
 import type { UpdateUserRequest, UserJson } from "trailbase-bindings";
 
@@ -160,7 +161,9 @@ function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
         const oauthAsset =
-          providerId > 0n ? assets.get(Number(providerId)) : undefined;
+          providerId > 0n
+            ? assets.get(oAuthProviderIdFromJSON(Number(providerId)))
+            : undefined;
 
         return (
           <Switch>

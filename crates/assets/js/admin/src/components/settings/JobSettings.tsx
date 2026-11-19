@@ -24,7 +24,12 @@ import {
 import type { CommonProps } from "@/components/settings/SettingsPage";
 import { type FieldApiT, FieldInfo } from "@/components/FormFields";
 
-import { Config, JobsConfig, SystemJob } from "@proto/config";
+import {
+  Config,
+  JobsConfig,
+  SystemJob,
+  systemJobIdFromJSON,
+} from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { listJobs, runJob } from "@/lib/api/jobs";
 
@@ -86,7 +91,7 @@ function buildFormProxy(
 
   for (const job of jobs) {
     const d: SystemJob = {
-      id: job.id,
+      id: systemJobIdFromJSON(job.id),
       schedule: job.schedule,
       disabled: !job.enabled,
     };
@@ -273,11 +278,7 @@ function JobSettingsImpl(
                         };
 
                         return (
-                          <TableRow>
-                            {/*
-                          <TableCell>{proxy().config.id}</TableCell>
-                          */}
-
+                          <TableRow class="h-[76px]">
                             <TableCell>{proxy().job?.name}</TableCell>
 
                             <TableCell>

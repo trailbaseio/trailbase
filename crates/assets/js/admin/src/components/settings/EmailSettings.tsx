@@ -501,7 +501,7 @@ function textLabel(label: string) {
 
 function SmtpEncryptionSelect(props: {
   value: SmtpEncryption | undefined;
-  handleChange: (v: SmtpEncryption | undefined) => void;
+  handleChange: (v: SmtpEncryption) => void;
   disabled?: boolean;
 }) {
   return (
