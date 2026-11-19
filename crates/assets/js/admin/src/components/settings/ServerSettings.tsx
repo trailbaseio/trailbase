@@ -8,13 +8,19 @@ import {
 } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
+import type { InfoResponse } from "trailbase-bindings";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
-import type { InfoResponse } from "trailbase-bindings";
-import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,
   unsetOrValidUrl,
@@ -26,6 +32,12 @@ import {
 import { Version } from "@/components/Version";
 import type { CommonProps } from "@/components/settings/SettingsPage";
 
+import {
+  Config,
+  ServerConfig,
+  ProxyClientIpHeader,
+  proxyClientIpHeaderToJSON,
+} from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { createSystemInfoQuery } from "@/lib/api/info";
 
@@ -189,6 +201,47 @@ function ServerSettingsForm(
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <h2>Proxy</h2>
+        </CardHeader>
+
+        <CardContent>
+          <p class="mb-4 text-sm">
+            If your TrailBase instance sits behind (reverse) proxies, the peer
+            address will be the proxy's. In order for traffic attribution
+            (logging & rate limiting) to work correctly, proxies will attach a
+            header forwarding their respective peer's address. Specify your
+            proxy setup to narrowly extract a specific header controlled by your
+            proxy (as opposed to clients).
+          </p>
+
+          <form.Field name="proxy.clientIpHeader">
+            {(field) => {
+              return (
+                <TextField class="w-full">
+                  <div
+                    class="grid items-center gap-x-2 gap-y-1"
+                    style={{ "grid-template-columns": "auto 1fr" }}
+                  >
+                    <div class="w-40">
+                      <TextFieldLabel>Client-IP Header</TextFieldLabel>
+                    </div>
+
+                    <div class="w-full">
+                      <ProxyHeaderSelect
+                        value={field().state.value}
+                        handleChange={field().handleChange}
+                      />
+                    </div>
+                  </div>
+                </TextField>
+              );
+            }}
+          </form.Field>
+        </CardContent>
+      </Card>
+
       <div class="flex justify-end gap-4">
         <form.Subscribe
           selector={(state) => ({
@@ -211,6 +264,79 @@ function ServerSettingsForm(
       </div>
     </form>
   );
+}
+
+function ProxyHeaderSelect(props: {
+  value: ProxyClientIpHeader | undefined;
+  handleChange: (v: ProxyClientIpHeader) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Select<ProxyClientIpHeader | undefined>
+      value={props.value}
+      disabled={props.disabled}
+      options={proxyClientIpHeaderOptions()}
+      placeholder={proxyClientIpHeaderLabel(undefined)}
+      itemComponent={(props) => (
+        <SelectItem item={props.item}>
+          {proxyClientIpHeaderLabel(props.item.rawValue)}
+        </SelectItem>
+      )}
+      onChange={(value) => {
+        props.handleChange(
+          value ?? ProxyClientIpHeader.PROXY_CLIENT_IP_HEADER_UNDEFINED,
+        );
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue<ProxyClientIpHeader>>
+          {(_state) => proxyClientIpHeaderLabel(props.value)}
+        </SelectValue>
+      </SelectTrigger>
+
+      <SelectContent />
+    </Select>
+  );
+}
+
+function proxyClientIpHeaderOptions(): (ProxyClientIpHeader | undefined)[] {
+  return [
+    undefined,
+    // ProxyClientIpHeader.PROXY_CLIENT_IP_HEADER_UNDEFINED,
+    ProxyClientIpHeader.NONE,
+    ProxyClientIpHeader.X_FORWARDED_FOR,
+    ProxyClientIpHeader.X_REAL_IP,
+    ProxyClientIpHeader.CF_CONNECTING_IP,
+    ProxyClientIpHeader.TRUE_CLIENT_IP,
+    ProxyClientIpHeader.FLY_CLIENT_IP,
+    ProxyClientIpHeader.CLOUDFRONT_VIEWER_ADDRESS,
+  ];
+}
+
+function proxyClientIpHeaderLabel(
+  header: ProxyClientIpHeader | undefined,
+): string {
+  switch (header) {
+    case ProxyClientIpHeader.NONE:
+      return "None (no proxy)";
+    case ProxyClientIpHeader.X_FORWARDED_FOR:
+      return "X-Forwarded-For";
+    case ProxyClientIpHeader.X_REAL_IP:
+      return "X-Real-Ip";
+    case ProxyClientIpHeader.TRUE_CLIENT_IP:
+      return "True-Client-Ip (e.g. Cloudflare enterprise)";
+    case ProxyClientIpHeader.CF_CONNECTING_IP:
+      return "Cloudflare (Cf-Connecting-Ip)";
+    case ProxyClientIpHeader.FLY_CLIENT_IP:
+      return "Fly";
+    case ProxyClientIpHeader.CLOUDFRONT_VIEWER_ADDRESS:
+      return "AWS CloudFront";
+    case ProxyClientIpHeader.PROXY_CLIENT_IP_HEADER_UNDEFINED:
+    case undefined:
+      return "Any Header (insecure default)";
+    default:
+      return proxyClientIpHeaderToJSON(header);
+  }
 }
 
 function SystemInformation(props: { systemInfo: InfoResponse }) {

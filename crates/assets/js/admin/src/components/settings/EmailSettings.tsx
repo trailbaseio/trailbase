@@ -44,7 +44,12 @@ import type { FormApiT } from "@/components/FormFields";
 
 import type { TestEmailRequest } from "trailbase-bindings";
 
-import { Config, EmailConfig, SmtpEncryption } from "@proto/config";
+import {
+  Config,
+  EmailConfig,
+  SmtpEncryption,
+  smtpEncryptionToJSON,
+} from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { $user } from "@/lib/client";
 import { adminFetch } from "@/lib/fetch";
@@ -508,12 +513,7 @@ function SmtpEncryptionSelect(props: {
     <Select<SmtpEncryption | undefined>
       value={props.value}
       disabled={props.disabled}
-      options={[
-        undefined,
-        // SmtpEncryption.SMTP_ENCRYPTION_STARTTLS,
-        SmtpEncryption.SMTP_ENCRYPTION_TLS,
-        SmtpEncryption.SMTP_ENCRYPTION_NONE,
-      ]}
+      options={smtpEncryptionOptions()}
       placeholder={smtpEncryptionLabel(undefined)}
       itemComponent={(props) => (
         <SelectItem item={props.item}>
@@ -535,17 +535,30 @@ function SmtpEncryptionSelect(props: {
   );
 }
 
+function smtpEncryptionOptions(): (SmtpEncryption | undefined)[] {
+  return [
+    // NOTE: STARTTLS, UNDEFINED and undefined are functionally identical.
+    // SmtpEncryption.SMTP_ENCRYPTION_STARTTLS,
+    // SmtpEncryption.SMTP_ENCRYPTION_UNDEFINED,
+    undefined,
+    SmtpEncryption.SMTP_ENCRYPTION_TLS,
+    SmtpEncryption.SMTP_ENCRYPTION_NONE,
+  ];
+}
+
 function smtpEncryptionLabel(enc: SmtpEncryption | undefined): string {
   switch (enc) {
     case SmtpEncryption.SMTP_ENCRYPTION_NONE:
       return "None (Plain)";
     case SmtpEncryption.SMTP_ENCRYPTION_TLS:
       return "TLS/SSL";
-    // Server falls back to starttls.
+    // These are functionally identical: Server falls back to starttls.
     case SmtpEncryption.SMTP_ENCRYPTION_STARTTLS:
     case SmtpEncryption.SMTP_ENCRYPTION_UNDEFINED:
-    default:
+    case undefined:
       return "STARTTLS (Default)";
+    default:
+      return smtpEncryptionToJSON(enc);
   }
 }
 

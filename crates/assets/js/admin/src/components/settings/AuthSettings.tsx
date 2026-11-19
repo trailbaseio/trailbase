@@ -49,6 +49,7 @@ import {
   OAuthProviderId,
   UserIdentifier,
   oAuthProviderIdFromJSON,
+  userIdentifierToJSON,
 } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { adminFetch } from "@/lib/fetch";
@@ -840,7 +841,7 @@ function InfoTooltip(props: {
 
 function UserIdentifierSelect(props: {
   value: UserIdentifier | undefined;
-  handleChange: (v: UserIdentifier | undefined) => void;
+  handleChange: (v: UserIdentifier) => void;
   disabled?: boolean;
 }) {
   return (
@@ -888,8 +889,10 @@ function userIdentifierLabel(ui: UserIdentifier | undefined): string {
       return "Email + username";
     case UserIdentifier.ONLY_EMAIL:
     case UserIdentifier.USER_IDENTIFIER_UNDEFINED:
-    default:
+    case undefined:
       return "Only email (Default)";
+    default:
+      return userIdentifierToJSON(ui);
   }
 }
 
