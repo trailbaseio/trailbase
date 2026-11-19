@@ -22,14 +22,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 import { Config, DatabaseConfig } from "@proto/config";
 import { createSystemInfoQuery } from "@/lib/api/info";
 
-export function DatabaseSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function DatabaseSettings(props: CommonProps) {
   const config = createConfigQuery();
   const systemInfo = createSystemInfoQuery();
   const isPostgres = () => systemInfo.data?.postgres ?? false;
@@ -61,11 +59,7 @@ export function DatabaseSettings(props: {
   );
 }
 
-function DatabaseSettingsForm(props: {
-  config: Config;
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+function DatabaseSettingsForm(props: { config: Config } & CommonProps) {
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = createSignal(new Set<string>());
   const [linkDbDialog, setLinkDbDialog] = createSignal(false);
@@ -231,7 +225,6 @@ function DatabaseSettingsForm(props: {
                   onClick={() => {
                     (async () => {
                       await unlinkSelectedDbs();
-
                       props.postSubmit();
                     })();
                   }}

@@ -130,7 +130,6 @@ export function CreateAlterTableForm(props: {
       invalidateConfig(queryClient);
 
       // Reload schemas and switch to new/altered table.
-      // eslint-disable-next-line solid/reactivity
       props.schemaRefetch().then(() => {
         props.setSelected(value.name);
       });

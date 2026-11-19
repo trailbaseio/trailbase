@@ -31,6 +31,7 @@ import {
   TextFieldLabel,
   TextFieldInput,
 } from "@/components/ui/text-field";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 import {
   unsetOrLargerThanZero,
@@ -133,10 +134,7 @@ function EmailTemplate(props: {
   );
 }
 
-export function EmailSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function EmailSettings(props: CommonProps) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
 

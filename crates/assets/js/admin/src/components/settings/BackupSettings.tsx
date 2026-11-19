@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 function Timestamp(props: { timestamp: bigint }) {
   const time = (): Date => new Date(Number(props.timestamp));
@@ -33,10 +34,7 @@ function Timestamp(props: { timestamp: bigint }) {
   return <div>{time().toLocaleString()}</div>;
 }
 
-export function BackupSettings(_props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function BackupSettings(_props: CommonProps) {
   const backupsList = useQuery(() => ({
     queryKey: listBackupsKey,
     queryFn: listBackups,

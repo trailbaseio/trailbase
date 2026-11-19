@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 import { adminFetch } from "@/lib/fetch";
 import { createSystemInfoQuery } from "@/lib/api/info";
@@ -27,11 +28,7 @@ function toSorted(schemas: JsonSchema[]): JsonSchema[] {
 }
 
 // TODO: Make this editable. Right now this doesn't even need to be a form.
-function SchemaSettingsForm(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-  schemas: JsonSchema[];
-}) {
+function SchemaSettingsForm(props: { schemas: JsonSchema[] } & CommonProps) {
   const form = createForm(() => ({
     defaultValues: {
       entries: props.schemas,
@@ -99,10 +96,7 @@ function SchemaSettingsForm(props: {
   );
 }
 
-export function SchemaSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function SchemaSettings(props: CommonProps) {
   const schemas = useQuery(() => ({
     queryKey: ["admin", "jsonSchemas"],
     queryFn: listSchemas,
@@ -155,9 +149,8 @@ export function SchemaSettings(props: {
               <div class="h-4" />
 
               <SchemaSettingsForm
-                markDirty={props.markDirty}
-                postSubmit={props.postSubmit}
                 schemas={schemas.data?.schemas ?? []}
+                {...props}
               />
             </CardContent>
           </Card>

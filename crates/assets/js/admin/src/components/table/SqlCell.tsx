@@ -18,7 +18,6 @@ import {
 import type {
   Column,
   ColumnDataType,
-  ForeignKey,
   QualifiedName,
   SqlValue,
 } from "trailbase-bindings";
@@ -31,7 +30,6 @@ import {
   UploadedFiles,
 } from "@/components/table/Files";
 import { Uuid } from "@/components/table/Uuid";
-import { Link } from "@kobalte/core";
 
 export type CellType =
   "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;

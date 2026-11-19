@@ -40,6 +40,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 import {
   AuthConfig,
@@ -372,12 +373,12 @@ function createAuthSettingsForm(opts: {
   });
 }
 
-function AuthSettingsForm(props: {
-  config: Config;
-  providers: OAuthProviderResponse;
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+function AuthSettingsForm(
+  props: {
+    config: Config;
+    providers: OAuthProviderResponse;
+  } & CommonProps,
+) {
   const values = createMemo(() =>
     configToProxy(
       props.providers.providers,
@@ -774,10 +775,7 @@ function OAuthCallbackAddressInfo(props: {
   );
 }
 
-export function AuthSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function AuthSettings(props: CommonProps) {
   const providers = useQuery(() => ({
     queryKey: ["admin", "oauthproviders"],
     queryFn: adminListOAuthProviders,
@@ -807,10 +805,9 @@ export function AuthSettings(props: {
 
         <Match when={config.data && providers.data}>
           <AuthSettingsForm
-            markDirty={props.markDirty}
-            postSubmit={props.postSubmit}
             providers={providers.data!}
             config={protoConfig()}
+            {...props}
           />
         </Match>
       </Switch>

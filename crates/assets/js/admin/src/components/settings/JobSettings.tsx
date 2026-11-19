@@ -21,8 +21,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
+import type { CommonProps } from "@/components/settings/SettingsPage";
 import { type FieldApiT, FieldInfo } from "@/components/FormFields";
+
 import { Config, JobsConfig, SystemJob } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { listJobs, runJob } from "@/lib/api/jobs";
@@ -123,13 +124,13 @@ function extractConfig(proxy: FormProxy): JobsConfig {
   };
 }
 
-function JobSettingsImpl(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-  config: Config;
-  jobs: Job[];
-  refetchJobs: () => void;
-}) {
+function JobSettingsImpl(
+  props: {
+    config: Config;
+    jobs: Job[];
+    refetchJobs: () => void;
+  } & CommonProps,
+) {
   const queryClient = useQueryClient();
   const form = createForm(() => ({
     defaultValues: buildFormProxy(props.config.jobs, props.jobs),
@@ -399,10 +400,7 @@ function JobSettingsImpl(props: {
   );
 }
 
-export function JobSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function JobSettings(props: CommonProps) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
   const jobList = useQuery(() => ({

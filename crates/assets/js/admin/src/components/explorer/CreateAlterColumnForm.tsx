@@ -420,8 +420,6 @@ function ColumnOptionForeignKeySelect(props: {
       </Select>
 
       <Show when={foreignTable()}>
-        <div></div>
-
         <div class="flex flex-col gap-2">
           <div class="flex w-full items-center gap-2">
             <div class="min-w-22">ON DELETE</div>

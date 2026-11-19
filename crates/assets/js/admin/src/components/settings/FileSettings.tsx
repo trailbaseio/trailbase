@@ -9,14 +9,12 @@ import {
   unsetOrNotEmptyValidator,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
+import type { CommonProps } from "@/components/settings/SettingsPage";
 
 import { Config, ServerConfig } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 
-export function FileSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
-}) {
+export function FileSettings(props: CommonProps) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
 
