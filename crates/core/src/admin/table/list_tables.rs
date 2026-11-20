@@ -170,33 +170,64 @@ async fn list_tables_handler_sqlite_impl(
     }
   }
 
-  // Also include golden DBs for each tenant template.
+  // Also include the tenant DBs. We can go two routes here: I'd have this driven by the `_tenant`
+  // table or just read the FS. We went with the latter since it seemed more robust. There may also
+  // be value in displaying stragglers, e.g. tenants that were removed but the table still exists.
   //
-  // TODO: Add actual tenant DBs.
+  // TODO: It may be worth highlighting stragglers: *.db's w/o a corresponding _tenant entry.
   for tenant_template in tenant_templates
     .into_iter()
     .flat_map(|template| template.name)
     .unique()
   {
-    let ConnectionEntry {
-      connection: conn, ..
-    } = state
-      .connection_manager()
-      .build_for_tenant(&tenant_template, None)
-      .await?;
+    let Ok(mut dir) = std::fs::read_dir(&state.data_dir().tenant_db_dir(&tenant_template)) else {
+      warn!("failed to read data dir for tenant template: {tenant_template}");
+      continue;
+    };
 
-    let databases = conn.list_databases().await?;
-    for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
-      log::debug!("scanning {tenant_template}, {schema:?}");
+    while let Some(Ok(entry)) = dir.next() {
+      let Ok(metadata) = entry.metadata() else {
+        continue;
+      };
 
-      add_schema_to_response(
-        schema,
-        &mut response,
-        Some(Tenant {
-          template: tenant_template.clone(),
-          tenant: None,
-        }),
-      )?;
+      if !metadata.is_file() && !metadata.is_symlink() {
+        continue;
+      }
+
+      let path = entry.path();
+      match (
+        path.file_stem().and_then(|ext| ext.to_str()),
+        path.extension().and_then(|ext| ext.to_str()),
+      ) {
+        (Some(stem), Some("db")) if stem != "golden" => {
+          let Ok(tenant_id) = uuid::Uuid::parse_str(stem) else {
+            warn!("Failed to parse tenant id");
+            continue;
+          };
+
+          let ConnectionEntry {
+            connection: conn, ..
+          } = state
+            .connection_manager()
+            .build_for_tenant(&tenant_template, Some(tenant_id))
+            .await?;
+
+          let databases = conn.list_databases().await?;
+          for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
+            debug!("scanning {tenant_template}, {schema:?}");
+
+            add_schema_to_response(
+              schema,
+              &mut response,
+              Some(Tenant {
+                template: tenant_template.clone(),
+                tenant: Some(tenant_id.to_string()),
+              }),
+            )?;
+          }
+        }
+        _ => {}
+      }
     }
   }
 
