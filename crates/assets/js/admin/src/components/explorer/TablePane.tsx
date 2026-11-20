@@ -263,6 +263,14 @@ function TableHeaderRightHandButtons(props: {
   );
 }
 
+export function schemaKey(tableOrView: Schema<Table> | Schema<View>): string {
+  const tenant = tableOrView.tenant;
+  if (tenant) {
+    return `${tenant.template}::${tenant.name ?? tenant.id ?? "golden"}`;
+  }
+  return tableOrView.schema.name.database_schema ?? "main";
+}
+
 function TablePaneHeader(props: {
   table: Schema<Table> | Schema<View>;
   allTables: Schema<Table>[];
@@ -271,13 +279,12 @@ function TablePaneHeader(props: {
   postgres: boolean;
 }) {
   const allTables = createMemo(() => props.allTables.map((t) => t.schema));
-  const selectedSchema = () => props.table.schema;
-  const type = () => tableType(selectedSchema());
+  const type = () => tableType(props.table.schema);
 
   return (
     <Header
-      title={selectedSchema().name.database_schema ?? "main"}
-      titleSelect={selectedSchema().name.name}
+      title={schemaKey(props.table)}
+      titleSelect={props.table.schema.name.name}
       left={
         <div class="flex items-center">
           <Badge variant="outline" class="flex gap-1">
@@ -292,7 +299,7 @@ function TablePaneHeader(props: {
       }
       right={
         <TableHeaderRightHandButtons
-          table={selectedSchema()}
+          table={props.table.schema}
           allTables={allTables()}
           schemaRefetch={props.schemaRefetch}
           postgres={props.postgres}
