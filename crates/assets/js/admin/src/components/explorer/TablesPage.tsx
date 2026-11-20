@@ -112,7 +112,7 @@ function groupBy<T, K>(arr: T[], keySelector: (item: T) => K): T[][] {
 function schemaTenantKey(tableOrView: Schema<Table> | Schema<View>): string {
   const tenant = tableOrView.tenant;
   if (tenant) {
-    return `${tenant.template}::${tenant.tenant ?? "golden"}`;
+    return `${tenant.template}::${tenant.name ?? tenant.id ?? "golden"}`;
   }
   return tableOrView.schema.name.database_schema ?? "main";
 }

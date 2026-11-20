@@ -52,8 +52,8 @@ export function buildListSearchParams(args: ListArgs): URLSearchParams {
 
   if (tenant) {
     params.set("tenant_template", tenant.template);
-    if (tenant.tenant) {
-      params.set("tenant_id", tenant.tenant);
+    if (tenant.id) {
+      params.set("tenant_id", tenant.id);
     }
   }
 
