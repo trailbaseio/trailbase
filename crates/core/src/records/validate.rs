@@ -80,21 +80,38 @@ pub(crate) async fn validate_record_api_config(
     entity: Entity::Unknown,
   };
 
-  let ConnectionEntry { metadata, .. } =
-    if let Some(ref tenant_template) = api_config.tenant_template {
-      connection_manager
-        .build_for_tenant(tenant_template, None)
-        .await
-    } else {
-      connection_manager.get_entry_for_qn(&table_name).await
+  let ConnectionEntry {
+    metadata,..
+  } = if let Some(ref tenant_template) = api_config.tenant_template {
+    if table_name.database_schema.as_ref() != Some(tenant_template) {
+      return Err(invalid_prefixed(
+        &prefix,
+        format!(
+          "multi-tenant API can only reference tables in the template '{tenant_template}' schema."
+        ),
+      ));
     }
-    .map_err(|err| {
-      return invalid_prefixed(&prefix, err);
-    })?;
 
-  // FIXME: For multi-tenant APIs, we need to build/read metadata for tenant templates.
-  // I.e. apply migrations to a in-memory DB and then read it.
+    if !api_config.acl_world.is_empty() {
+      return Err(invalid_prefixed(
+        &prefix,
+        "Multi-tenant APIs cannot be world-accessible, they always require an authenticated user associated with a tenant."
+      ));
+    }
+
+    connection_manager
+      .build_for_tenant(tenant_template, None)
+      .await
+  } else {
+    connection_manager.get_entry_for_qn(&table_name).await
+  }
+  .map_err(|err| {
+    return invalid_prefixed(&prefix, err);
+  })?;
+
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
+    log::debug!("Failed to find '{table_name}' in: {metadata:?}",);
+
     return Err(invalid_prefixed(&prefix, "not found."));
   };
 

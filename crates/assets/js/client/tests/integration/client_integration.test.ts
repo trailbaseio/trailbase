@@ -101,6 +101,15 @@ describe("auth", () => {
     expect(client1.user()?.username).toBe("admin");
     expect(client1.user()?.tenant?.template).toBe("test_template");
     expect(client1.user()?.tenant?.id).toBe(client0.user()?.tenant?.id);
+
+    // Access `tenant_api`.
+    const api = client1.records("tenant_api");
+    const id = await api.create({
+      data: "test-data",
+    });
+
+    const record = await api.read(id);
+    expect(record.data).toBe("test-data");
   });
 
   test("register user", async () => {
