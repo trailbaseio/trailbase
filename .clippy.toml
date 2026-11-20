@@ -1,0 +1,4 @@
+ignore-interior-mutability = [
+  "bytes::Bytes",
+  "trailbase::records::record_api::RecordApiByName",
+]

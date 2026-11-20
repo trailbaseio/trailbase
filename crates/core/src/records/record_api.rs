@@ -579,7 +579,7 @@ impl RecordApi {
 
   pub fn single_tenant_conn(&self) -> &trailbase_sqlite::Connection {
     return match &self.state.conn {
-      ApiConnection::SingleTenant(conn) => &conn,
+      ApiConnection::SingleTenant(conn) => conn,
       ApiConnection::MultiTenant { .. } => {
         panic!("misconfiguration");
       }
@@ -603,7 +603,7 @@ impl RecordApi {
 
         Ok(
           mgr
-            .build_for_tenant(&tenant_template, Some(tenant.id))
+            .build_for_tenant(tenant_template, Some(tenant.id))
             .await
             .map_err(|err| {
               RecordError::Internal(format!("Failed to open connection: {err}").into())
@@ -842,6 +842,7 @@ impl RecordApi {
   }
 }
 
+#[allow(clippy::mutable_key_type)]
 pub struct RecordApiByName(pub RecordApi);
 
 // Hash only the `id` field
