@@ -103,7 +103,7 @@ impl AuthTokenClaims {
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
       username: db_user.username.clone(),
-      tenant: tenant,
+      tenant,
       csrf_token: random_alphanumeric(24).to_compact_string(),
     };
   }
