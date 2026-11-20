@@ -60,7 +60,7 @@ base64 = { version = "0.23.1", default-features = false, features = ["alloc", "s
 bytes = { version = "1.12.2", features = ["serde"] }
 chrono = { version = "0.4.45", default-features = false }
 compact_str = { version = "0.10.0", default-features = false, features = ["serde"] }
-clap = { version = "^4.6.8", features=["derive", "env"] }
+clap = { version = "^4.6.9", features=["derive", "env"] }
 cron = "0.17.0"
 crossfire = { version = "3.1.23", default-features = false, features = ["tokio"] }
 env_logger = { version = "^0.11.11", default-features = false, features = ["auto-color", "humantime"] }
@@ -117,10 +117,10 @@ ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-
 utoipa = { version = "6.0.0", default-features = false, features = ["axum_extras", "debug", "indexmap", "uuid", "macros"] }
 utoipa-axum = { version = "0.3.0" }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = { version = "48.0.9", features = ["winch"] }
-wasmtime-wasi = { version = "48.0.9", default-features = false, features = [] }
-wasmtime-wasi-http = { version = "48.0.9", features = ["p2"] }
-wasmtime-wasi-io = { version = "48.0.9", features = [] }
+wasmtime = { version = "48.0.10", features = ["winch"] }
+wasmtime-wasi = { version = "48.0.10", default-features = false, features = [] }
+wasmtime-wasi-http = { version = "48.0.10", features = ["p2"] }
+wasmtime-wasi-io = { version = "48.0.10", features = [] }
 
 # When building TrailBase as a standalone workspace, use local submodule paths.
 # These [patch] sections are ignored when TrailBase is consumed as a dependency
