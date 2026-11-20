@@ -85,10 +85,20 @@ pub async fn list_rows_handler(
     connection: conn,
     metadata: _metadata,
   } = if let Some(tenant_template) = tenant_template {
-    state
-      .connection_manager()
-      .build_for_tenant(&tenant_template, None)
-      .await?
+    if let Some(tenant_id) = tenant_id {
+      let tenant_id =
+        uuid::Uuid::parse_str(&tenant_id).map_err(|err| Error::BadRequest(err.into()))?;
+
+      state
+        .connection_manager()
+        .build_for_tenant(&tenant_template, Some(tenant_id))
+        .await?
+    } else {
+      state
+        .connection_manager()
+        .build_for_tenant(&tenant_template, None)
+        .await?
+    }
   } else {
     state
       .connection_manager()
