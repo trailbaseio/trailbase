@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
 use trailbase_schema::db::sqlite::{QualifiedName, Table, TableIndex, View};
+use trailbase_sqlite::params;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -23,7 +24,8 @@ pub struct TableTrigger {
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct Tenant {
   template: String,
-  tenant: Option<String>,
+  id: Option<uuid::Uuid>,
+  name: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
@@ -173,8 +175,6 @@ async fn list_tables_handler_sqlite_impl(
   // Also include the tenant DBs. We can go two routes here: I'd have this driven by the `_tenant`
   // table or just read the FS. We went with the latter since it seemed more robust. There may also
   // be value in displaying stragglers, e.g. tenants that were removed but the table still exists.
-  //
-  // TODO: It may be worth highlighting stragglers: *.db's w/o a corresponding _tenant entry.
   for tenant_template in tenant_templates
     .into_iter()
     .flat_map(|template| template.name)
@@ -205,6 +205,19 @@ async fn list_tables_handler_sqlite_impl(
             continue;
           };
 
+          let tenant_name: Option<String> = state
+            .user_conn()
+            .read_query_row_get(
+              "SELECT name FROM _tenant WHERE id = $1",
+              params!(tenant_id.into_bytes()),
+              0,
+            )
+            .await?;
+
+          if tenant_name.is_none() {
+            warn!("Found tenant DB w/o associated tenant entry. Stale DB?");
+          }
+
           let ConnectionEntry {
             connection: conn, ..
           } = state
@@ -221,7 +234,8 @@ async fn list_tables_handler_sqlite_impl(
               &mut response,
               Some(Tenant {
                 template: tenant_template.clone(),
-                tenant: Some(tenant_id.to_string()),
+                id: Some(tenant_id),
+                name: tenant_name.clone(),
               }),
             )?;
           }
