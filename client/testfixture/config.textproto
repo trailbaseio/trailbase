@@ -88,6 +88,11 @@ record_apis: [{
   name: "jokes"
   table_name: "\'\360\237\220\242.\360\237\222\250\'"
   acl_authenticated: [READ]
+}, {
+  name: "tenant_api"
+  table_name: "test_template.test_table"
+  tenant_template: "test_template"
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }]
 schemas: [{
   name: "simple_schema"

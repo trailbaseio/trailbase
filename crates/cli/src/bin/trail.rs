@@ -137,21 +137,35 @@ async fn async_main(
     }
     SubCommands::Migration { cmd } => {
       match cmd {
-        Some(MigrationCommands::New { suffix, db }) => {
-          let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
+        Some(MigrationCommands::New { db, suffix }) => {
           let dir = data_dir
             .migrations_path()
             .join(db.as_deref().unwrap_or("main"));
-          let path = dir.join(filename);
-
           if !dir.exists() {
-            std::fs::create_dir_all(dir)?;
+            std::fs::create_dir_all(&dir)?;
           }
 
+          let path = dir.join(api::new_unique_migration_filename(
+            suffix.as_deref().unwrap_or("update"),
+          ));
           let mut migration_file = std::fs::File::create_new(&path)?;
           migration_file.write_all(b"-- new database migration\n")?;
 
           eprintln!("Created empty migration file: {path:?}");
+        }
+        Some(MigrationCommands::NewTemplate { template, suffix }) => {
+          let dir = data_dir.template_migrations_dir(&template);
+          if !dir.exists() {
+            std::fs::create_dir_all(&dir)?;
+          }
+
+          let path = dir.join(api::new_unique_migration_filename(
+            suffix.as_deref().unwrap_or("update"),
+          ));
+          let mut migration_file = std::fs::File::create_new(&path)?;
+          migration_file.write_all(b"-- new database migration\n")?;
+
+          eprintln!("Created empty template migration file: {path:?}");
         }
         Some(MigrationCommands::Apply) => {
           let (new_db, _state) = AppState::init(InitArgs {

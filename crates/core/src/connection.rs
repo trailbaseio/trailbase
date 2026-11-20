@@ -309,12 +309,7 @@ impl ConnectionManager {
       tenant_dir.join(format!("golden.db"))
     };
 
-    let migrations_path = self
-      .state
-      .data_dir
-      .root()
-      .join("templates")
-      .join(tenant_template);
+    let migrations_path = self.state.data_dir.template_migrations_dir(tenant_template);
 
     let (conn, metadata, _new_db) = init_db_sqlite(
       Some(&self.state.data_dir.main_db_path()),

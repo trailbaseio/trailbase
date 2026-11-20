@@ -225,6 +225,11 @@ pub enum MigrationCommands {
     /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
     suffix: Option<String>,
   },
+  NewTemplate {
+    template: String,
+    /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
+    suffix: Option<String>,
+  },
   Apply,
 }
 
