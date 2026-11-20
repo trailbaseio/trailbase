@@ -8,7 +8,7 @@ import {
   TbOutlineTablePlus,
 } from "solid-icons/tb";
 
-import { TablePane } from "@/components/explorer/TablePane";
+import { TablePane, schemaKey } from "@/components/explorer/TablePane";
 import { SchemaIcon } from "@/components/explorer/SchemaIcon";
 import { CreateAlterTableForm } from "@/components/explorer/CreateAlterTable";
 import { SafeSheet } from "@/components/SafeSheet";
@@ -83,7 +83,7 @@ function tableSorter(
   a: Schema<Table> | Schema<View>,
   b: Schema<Table> | Schema<View>,
 ): number {
-  const [aDb, bDb] = [schemaTenantKey(a), schemaTenantKey(b)];
+  const [aDb, bDb] = [schemaKey(a), schemaKey(b)];
   if (aDb !== bDb) {
     return aDb.localeCompare(bDb);
   }
@@ -107,14 +107,6 @@ function groupBy<T, K>(arr: T[], keySelector: (item: T) => K): T[][] {
   }, new Map<K, T[]>());
 
   return Array.from(groups.values());
-}
-
-function schemaTenantKey(tableOrView: Schema<Table> | Schema<View>): string {
-  const tenant = tableOrView.tenant;
-  if (tenant) {
-    return `${tenant.template}::${tenant.name ?? tenant.id ?? "golden"}`;
-  }
-  return tableOrView.schema.name.database_schema ?? "main";
 }
 
 function TablePickerSidebar(props: {
@@ -144,7 +136,7 @@ function TablePickerSidebar(props: {
         return show || !hiddenTable(t.schema) || t.schema === selectedTable();
       });
 
-      const bySchema = groupBy(filtered, schemaTenantKey);
+      const bySchema = groupBy(filtered, schemaKey);
 
       // Sort by name and visibility.
       for (const tables of bySchema) {
@@ -242,7 +234,7 @@ function TablePickerSidebar(props: {
             <SidebarGroup>
               <SidebarGroupLabel>
                 <div class="flex w-full justify-between gap-2">
-                  <span>{schemaTenantKey(tables[0])}</span>
+                  <span>{schemaKey(tables[0])}</span>
 
                   <span class="text-xs">{tables.length}</span>
                 </div>
