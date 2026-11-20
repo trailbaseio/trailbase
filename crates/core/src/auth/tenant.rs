@@ -5,9 +5,11 @@ use crate::auth::AuthError;
 
 #[derive(Debug, Default, Clone)]
 pub struct DbTenant {
+  #[allow(unused)]
   pub id: [u8; 16],
   pub name: String,
   pub template: String,
+  #[allow(unused)]
   pub created: i64,
 }
 
@@ -42,10 +44,8 @@ impl DbTenant {
 
 pub async fn list_tenants(conn: &Connection) -> Result<Vec<DbTenant>, AuthError> {
   let rows = conn.read_query_rows("SELECT * FROM _tenant", ()).await?;
-  return Ok(
-    rows
-      .into_iter()
-      .map(DbTenant::from_row)
-      .collect::<Result<Vec<_>, _>>()?,
-  );
+  return rows
+    .into_iter()
+    .map(DbTenant::from_row)
+    .collect::<Result<Vec<_>, _>>();
 }

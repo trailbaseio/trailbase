@@ -306,7 +306,7 @@ impl ConnectionManager {
       tenant_dir.join(format!("{tenant_id}.db"))
     } else {
       // TODO: Somewhat hacky: we create a pristine DB just to derive metadata.
-      tenant_dir.join(format!("golden.db"))
+      tenant_dir.join("golden.db")
     };
 
     let migrations_path = self.state.data_dir.template_migrations_dir(tenant_template);
@@ -663,7 +663,7 @@ async fn init_db_sqlite<'a>(
       // Apply migrations.
       //
       // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-      apply_base_migrations(&mut secondary, Some(&migrations), schema_name)?;
+      apply_base_migrations(&mut secondary, Some(migrations), schema_name)?;
     }
 
     conn.attach(&file.to_string_lossy(), schema_name).await?;

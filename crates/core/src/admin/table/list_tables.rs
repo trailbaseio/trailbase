@@ -180,7 +180,7 @@ async fn list_tables_handler_sqlite_impl(
     .flat_map(|template| template.name)
     .unique()
   {
-    let Ok(mut dir) = std::fs::read_dir(&state.data_dir().tenant_db_dir(&tenant_template)) else {
+    let Ok(mut dir) = std::fs::read_dir(state.data_dir().tenant_db_dir(&tenant_template)) else {
       warn!("failed to read data dir for tenant template: {tenant_template}");
       continue;
     };

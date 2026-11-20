@@ -208,11 +208,9 @@ impl AppState {
         // First Dry-run.
         let dbs = find_tenant_dbs(&data_dir);
         for db in &dbs {
-          let mut conn = trailbase_extension::connect_rusqlite(
-            Some(&db),
-            Some(json_schema_registry.load_full()),
-          )
-          .map_err(|err| InitError::CustomInit(format!("{err}")))?;
+          let mut conn =
+            trailbase_extension::connect_rusqlite(Some(db), Some(json_schema_registry.load_full()))
+              .map_err(|err| InitError::CustomInit(format!("{err}")))?;
 
           let runner = new_migration_runner(&migrations).set_dry_run(true);
           runner
@@ -222,11 +220,9 @@ impl AppState {
 
         // Then full run.
         for db in &dbs {
-          let mut conn = trailbase_extension::connect_rusqlite(
-            Some(&db),
-            Some(json_schema_registry.load_full()),
-          )
-          .map_err(|err| InitError::CustomInit(format!("{err}")))?;
+          let mut conn =
+            trailbase_extension::connect_rusqlite(Some(db), Some(json_schema_registry.load_full()))
+              .map_err(|err| InitError::CustomInit(format!("{err}")))?;
 
           let runner = new_migration_runner(&migrations).set_dry_run(false);
           runner
@@ -476,9 +472,7 @@ impl AppState {
       .state
       .record_apis
       .update_unchecked(async move |prev| {
-        let next = build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
-
-        return next;
+        return build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
       })
       .await;
 
