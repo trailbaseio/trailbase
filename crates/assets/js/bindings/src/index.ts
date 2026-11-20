@@ -87,6 +87,7 @@ export * from './StatsResponse';
 export * from './Table';
 export * from './TableIndex';
 export * from './TableTrigger';
+export * from './Tenant';
 export * from './TestEmailRequest';
 export * from './TransactionResponse';
 export * from './TransactionResult';
