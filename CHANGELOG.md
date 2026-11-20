@@ -1,3 +1,8 @@
+## v0.36.2
+
+- Add a simple admin UI to configure your proxy setup and control client-ip extraction.
+- Update dependecies. Addresses Wasmtime security advisories.
+
 ## v0.36.1
 
 - Add `ProxyConfig` to allow configuring a known trusted (reverse-)proxy topology. This allows for narrower, more correct and safer extraction of client IPs from proxy-provded headers.
