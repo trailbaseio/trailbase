@@ -12,6 +12,7 @@ import type {
   ListRowsResponse,
   QualifiedName,
   SqlValue,
+  Tenant,
 } from "trailbase-bindings";
 
 function removeUndefined(row: Record): { [key: string]: SqlValue } {
@@ -105,20 +106,22 @@ function parseJSON(text: string) {
   return JSON.parse(text, reviver as any);
 }
 
-export async function fetchRows(
+// TODO: Move more options into opts.
+export async function listRows(
   tableName: QualifiedName,
-  filter: string | null,
   pageSize: number,
   pageIndex: number,
-  cursor: string | null,
-  order?: string,
+  opts?: {
+    filter?: string | null;
+    cursor: string | null;
+    order?: string;
+    tenant?: Tenant | null;
+  },
 ): Promise<ListRowsResponse> {
   const params = buildListSearchParams({
-    filter,
     pageSize,
     pageIndex,
-    cursor,
-    order,
+    ...opts,
   });
 
   const response = await adminFetch(

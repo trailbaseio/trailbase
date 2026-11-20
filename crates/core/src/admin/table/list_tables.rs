@@ -21,10 +21,16 @@ pub struct TableTrigger {
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
+pub struct Tenant {
+  template: String,
+  tenant: Option<String>,
+}
+
+#[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct Schema<T: TS> {
   schema: T,
   sql: String,
-  tenant_template: Option<String>,
+  tenant: Option<Tenant>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
@@ -92,7 +98,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
       .map(|t| Schema {
         schema: t.schema,
         sql: "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
-        tenant_template: None,
+        tenant: None,
       })
       .collect(),
     indexes: indexes
@@ -100,7 +106,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
       .map(|(schema, sql)| Schema {
         schema,
         sql,
-        tenant_template: None,
+        tenant: None,
       })
       .collect(),
     triggers: triggers
@@ -117,7 +123,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
           // NOTE: The action statement is not the full `CREATE TRIGGER`
           // statement like in SQLite.
           sql: t.action_statement,
-          tenant_template: None,
+          tenant: None,
         };
       })
       .collect(),
@@ -126,7 +132,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
       .map(|v| Schema {
         schema: v.schema,
         sql: "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
-        tenant_template: None,
+        tenant: None,
       })
       .collect(),
   }));
@@ -165,6 +171,8 @@ async fn list_tables_handler_sqlite_impl(
   }
 
   // Also include golden DBs for each tenant template.
+  //
+  // TODO: Add actual tenant DBs.
   for tenant_template in tenant_templates
     .into_iter()
     .flat_map(|template| template.name)
@@ -181,7 +189,14 @@ async fn list_tables_handler_sqlite_impl(
     for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
       log::debug!("scanning {tenant_template}, {schema:?}");
 
-      add_schema_to_response(schema, &mut response, Some(tenant_template.clone()))?;
+      add_schema_to_response(
+        schema,
+        &mut response,
+        Some(Tenant {
+          template: tenant_template.clone(),
+          tenant: None,
+        }),
+      )?;
     }
   }
 
@@ -247,7 +262,7 @@ async fn fetch_schemas(
 fn add_schema_to_response(
   schema: SqliteSchema,
   response: &mut ListSchemasResponse,
-  tenant_template: Option<String>,
+  tenant: Option<Tenant>,
 ) -> Result<(), Error> {
   let SqliteSchema {
     r#type: type_name,
@@ -280,7 +295,7 @@ fn add_schema_to_response(
             table
           },
           sql: sql.clone(),
-          tenant_template,
+          tenant,
         });
       }
     }
@@ -304,7 +319,7 @@ fn add_schema_to_response(
             index
           },
           sql: sql.clone(),
-          tenant_template,
+          tenant,
         });
       }
     }
@@ -336,7 +351,7 @@ fn add_schema_to_response(
             view
           },
           sql: sql.clone(),
-          tenant_template,
+          tenant,
         });
       }
     }
@@ -356,7 +371,7 @@ fn add_schema_to_response(
           table_name: tbl_name,
         },
         sql,
-        tenant_template,
+        tenant,
       });
     }
     ty => warn!("Unknown schema type for '{}': {ty}", name),

@@ -2,21 +2,21 @@ import type { SortingState } from "@tanstack/solid-table";
 import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
+import { Tenant } from "trailbase-bindings";
+
 export type ListArgs = {
   filter?: string | null;
   pageSize?: number;
   pageIndex?: number;
   cursor?: string | null;
   order?: string;
+  tenant?: Tenant | null;
 };
 
-export function buildListSearchParams({
-  filter,
-  pageSize,
-  pageIndex,
-  cursor,
-  order,
-}: ListArgs): URLSearchParams {
+export function buildListSearchParams(args: ListArgs): URLSearchParams {
+  console.debug("buildListSearchParams", args);
+  const { filter, pageSize, pageIndex, cursor, order, tenant } = args;
+
   const params = new URLSearchParams();
 
   if (filter) {
@@ -48,6 +48,13 @@ export function buildListSearchParams({
 
   if (order) {
     params.set("order", order);
+  }
+
+  if (tenant) {
+    params.set("tenant_template", tenant.template);
+    if (tenant.tenant) {
+      params.set("tenant_id", tenant.tenant);
+    }
   }
 
   return params;

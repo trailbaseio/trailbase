@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
-import { persistentAtom } from "@nanostores/persistent";
+import { persistentJSON } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
   TbOutlineLock,
@@ -79,18 +79,18 @@ function pickInitiallySelectedTable(
   return first;
 }
 
-function tableCompare(a: Table | View, b: Table | View): number {
-  const [aDb, bDb] = [
-    a.name.database_schema ?? "main",
-    b.name.database_schema ?? "main",
-  ];
+function tableSorter(
+  a: Schema<Table> | Schema<View>,
+  b: Schema<Table> | Schema<View>,
+): number {
+  const [aDb, bDb] = [schemaTenantKey(a), schemaTenantKey(b)];
   if (aDb !== bDb) {
     return aDb.localeCompare(bDb);
   }
 
-  const [aHidden, bHidden] = [hiddenTable(a), hiddenTable(b)];
+  const [aHidden, bHidden] = [hiddenTable(a.schema), hiddenTable(b.schema)];
   if (aHidden == bHidden) {
-    return a.name.name.localeCompare(b.name.name);
+    return a.schema.name.name.localeCompare(b.schema.name.name);
   }
   // Sort hidden tables to the back.
   return aHidden ? 1 : -1;
@@ -109,8 +109,16 @@ function groupBy<T, K>(arr: T[], keySelector: (item: T) => K): T[][] {
   return Array.from(groups.values());
 }
 
+function schemaTenantKey(tableOrView: Schema<Table> | Schema<View>): string {
+  const tenant = tableOrView.tenant;
+  if (tenant) {
+    return `${tenant.template}::${tenant.tenant ?? "golden"}`;
+  }
+  return tableOrView.schema.name.database_schema ?? "main";
+}
+
 function TablePickerSidebar(props: {
-  tablesAndViews: (Table | View)[];
+  tablesAndViews: (Schema<Table> | Schema<View>)[];
   allTables: Table[];
   selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
@@ -125,28 +133,27 @@ function TablePickerSidebar(props: {
 
   const [search, setSearch] = createSignal("");
 
-  const tablesAndViewsBySchema = createMemo((): (Table | View)[][] => {
-    const show = showHidden();
-    const filtered = props.tablesAndViews.filter((t) => {
-      if (search() !== "") {
-        return t.name.name.search(search()) !== -1;
+  const tablesAndViewsBySchema = createMemo(
+    (): (Schema<Table> | Schema<View>)[][] => {
+      const show = showHidden();
+      const filtered = props.tablesAndViews.filter((t) => {
+        if (search() !== "") {
+          return t.schema.name.name.search(search()) !== -1;
+        }
+
+        return show || !hiddenTable(t.schema) || t.schema === selectedTable();
+      });
+
+      const bySchema = groupBy(filtered, schemaTenantKey);
+
+      // Sort by name and visibility.
+      for (const tables of bySchema) {
+        tables.sort(tableSorter);
       }
 
-      return show || !hiddenTable(t) || t === selectedTable();
-    });
-
-    const bySchema = groupBy(
-      filtered,
-      (table) => table.name.database_schema ?? "main",
-    );
-
-    // Sort by name and visibility.
-    for (const tables of bySchema) {
-      tables.sort(tableCompare);
-    }
-
-    return bySchema;
-  });
+      return bySchema;
+    },
+  );
 
   const count = () =>
     tablesAndViewsBySchema().reduce((c, s) => c + s.length, 0);
@@ -231,11 +238,11 @@ function TablePickerSidebar(props: {
 
       <SidebarContent class="px-2">
         <For each={tablesAndViewsBySchema()}>
-          {(tables: (Table | View)[]) => (
+          {(tables: (Schema<Table> | Schema<View>)[]) => (
             <SidebarGroup>
               <SidebarGroupLabel>
                 <div class="flex w-full justify-between gap-2">
-                  <span>{tables[0].name.database_schema ?? "main"}</span>
+                  <span>{schemaTenantKey(tables[0])}</span>
 
                   <span class="text-xs">{tables.length}</span>
                 </div>
@@ -244,29 +251,31 @@ function TablePickerSidebar(props: {
               <SidebarGroupContent>
                 <SidebarMenu>
                   <For each={tables}>
-                    {(item: Table | View) => {
-                      const hidden = hiddenTable(item);
-                      const type = tableType(item);
+                    {(item: Schema<Table> | Schema<View>) => {
+                      const hidden = hiddenTable(item.schema);
+                      const type = tableType(item.schema);
                       const selected = () => {
                         const s = selectedTable();
                         if (s !== undefined) {
-                          return equalQualifiedNames(item.name, s.name);
+                          return equalQualifiedNames(item.schema.name, s.name);
                         }
                         return false;
                       };
 
-                      const name = prettyFormatQualifiedName(item.name);
+                      const name = prettyFormatQualifiedName(item.schema.name);
 
                       return (
                         <SidebarMenuItem>
                           <SidebarMenuButton
                             isActive={selected()}
-                            tooltip={prettyFormatQualifiedName(item.name)}
+                            tooltip={prettyFormatQualifiedName(
+                              item.schema.name,
+                            )}
                             variant="default"
                             size="md"
                             onClick={() => {
                               setOpenMobile(false);
-                              navigateToTable(navigate, item);
+                              navigateToTable(navigate, item.schema);
                             }}
                           >
                             <SchemaIcon type={type} />
@@ -312,8 +321,8 @@ function TableSplitView(props: {
 
   const allTables = createMemo(() => props.schemas.tables.map((t) => t.schema));
   const allTablesAndView = createMemo(() => [
-    ...props.schemas.tables.map((t) => t.schema),
-    ...props.schemas.views.map((v) => v.schema),
+    ...props.schemas.tables,
+    ...props.schemas.views,
   ]);
 
   const params = useParams<{ table: string | undefined }>();
@@ -347,10 +356,11 @@ function TableSplitView(props: {
                 allTables={allTables()}
                 setSelected={(tableName: QualifiedName) => {
                   const table = allTablesAndView().find((t) =>
-                    equalQualifiedNames(t.name, tableName),
+                    equalQualifiedNames(t.schema.name, tableName),
                   );
+
                   if (table) {
-                    navigateToTable(navigate, table);
+                    navigateToTable(navigate, table.schema);
                   }
                 }}
                 {...sheet}
@@ -430,11 +440,4 @@ type Settings = {
   showHidden?: boolean;
 };
 
-const $explorerSettings = persistentAtom<Settings>(
-  "explorer_settings",
-  {},
-  {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-  },
-);
+const $explorerSettings = persistentJSON<Settings>("explorer_settings", {});

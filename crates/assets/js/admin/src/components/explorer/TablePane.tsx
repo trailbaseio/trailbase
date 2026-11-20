@@ -7,7 +7,7 @@ import {
 } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
-import type { QueryObserverResult } from "@tanstack/solid-query";
+import type { QueryObserverResult, QueryKey } from "@tanstack/solid-query";
 import { createColumnHelper, sortFn_alphanumeric } from "@tanstack/solid-table";
 import type {
   ColumnDef,
@@ -74,7 +74,7 @@ import { hashSqlValue } from "@/lib/value";
 import { safeParseInt } from "@/lib/utils";
 import { equalQualifiedNames, TableType } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
-import { deleteRows, fetchRows } from "@/lib/api/row";
+import { deleteRows, listRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
 import {
   escapeQualifiedName,
@@ -789,8 +789,8 @@ export function TablePane(props: {
   schemaRefetch: () => Promise<void>;
   postgres: boolean;
 }) {
-  const selectedSchema = () => props.selectedTable.schema;
-  const type = () => tableType(selectedSchema());
+  const selectedTable = () => props.selectedTable;
+  const type = () => tableType(selectedTable().schema);
 
   // IMPORTANT: We need to memo the downstream search params use to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
@@ -822,7 +822,7 @@ export function TablePane(props: {
   const [sorting, setSortingImpl] = createWritableMemo<SortingState>(() => {
     // TODO: Represent sorting state in `searchParams`, e.g. `?order=+col1,-col2`.
     // Meanwhile this needs it's own reset.
-    const _ = [selectedSchema()];
+    const _ = [selectedTable()];
 
     return [];
   });
@@ -835,21 +835,24 @@ export function TablePane(props: {
     setSortingImpl(s);
   };
 
+  const queryKey = (): QueryKey => [
+    selectedTable(),
+    pagination(),
+    filter(),
+    sorting(),
+  ];
+
   const cursors = createMemo<Map<number, string>>(() => {
     // Reset cursor whenever table or search params change. This is basically
     // the same as `queryKey` below minus `pageIndex`.
-    const _ = [selectedSchema(), pageSize(), filter(), sorting()];
+    const _ = queryKey();
+
     console.debug("resetting cursor");
     return new Map();
   });
 
   const records: QueryObserverResult<ListRowsResponse> = useQuery(() => ({
-    queryKey: [
-      selectedSchema(),
-      pagination(),
-      filter(),
-      sorting(),
-    ] as ReadonlyArray<unknown>,
+    queryKey: queryKey(),
     queryFn: async ({ queryKey }) => {
       console.debug("Fetching data with key:", queryKey);
 
@@ -857,13 +860,16 @@ export function TablePane(props: {
         const { pageSize, pageIndex } = pagination();
         const cursor = cursors().get(pageIndex - 1);
 
-        const response = await fetchRows(
-          selectedSchema().name,
-          filter() ?? null,
+        const response = await listRows(
+          selectedTable().schema.name,
           pageSize,
           pageIndex,
-          cursor ?? null,
-          formatSortingAsOrder(sorting()),
+          {
+            filter: filter() ?? null,
+            cursor: cursor ?? null,
+            order: formatSortingAsOrder(sorting()),
+            tenant: selectedTable().tenant,
+          },
         );
 
         // Update cursors.
@@ -939,7 +945,7 @@ export function TablePane(props: {
             {/* Covers both, loading and success states */}
             <Match when={true}>
               <RecordTable
-                selectedSchema={selectedSchema()}
+                selectedSchema={selectedTable().schema}
                 records={records.isSuccess ? records.data : undefined}
                 pagination={[pagination, setPagination]}
                 filter={[filter, setFilter]}
@@ -955,7 +961,7 @@ export function TablePane(props: {
           <Switch>
             <Match when={type() === "table"}>
               <TableSchema
-                table={selectedSchema() as Table}
+                table={selectedTable().schema as Table}
                 createTable={props.selectedTable.sql}
                 schemas={props.schemas}
                 schemaRefetch={props.schemaRefetch}
@@ -964,7 +970,7 @@ export function TablePane(props: {
 
             <Match when={type() === "view"}>
               <ViewSchema
-                view={selectedSchema() as View}
+                view={selectedTable().schema as View}
                 createView={props.selectedTable.sql}
               />
             </Match>
@@ -974,13 +980,13 @@ export function TablePane(props: {
         <Show when={type() === "table"}>
           <TabsContent value="indexes" class="flex flex-col gap-8 p-4">
             <IndexTable
-              table={selectedSchema() as Table}
+              table={selectedTable().schema as Table}
               schemas={props.schemas}
               schemaRefetch={props.schemaRefetch}
             />
 
             <TriggerTable
-              table={selectedSchema() as Table}
+              table={selectedTable().schema as Table}
               schemas={props.schemas}
             />
           </TabsContent>
