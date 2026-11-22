@@ -1,4 +1,5 @@
 use axum::{Json, extract::State};
+use const_format::formatcp;
 use itertools::Itertools;
 use log::*;
 use serde::Serialize;
@@ -12,6 +13,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::constants::SQLITE_SCHEMA_TABLE;
+use crate::constants::TENANT_TABLE;
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
 // parsing sqlite triggers. Now we're using sqlite3_parser and should return structured data
@@ -208,7 +210,7 @@ async fn list_tables_handler_sqlite_impl(
           let tenant_name: Option<String> = state
             .user_conn()
             .read_query_row_get(
-              "SELECT name FROM _tenant WHERE id = $1",
+              formatcp!("SELECT name FROM \"{TENANT_TABLE}\" WHERE id = $1"),
               params!(tenant_id.into_bytes()),
               0,
             )

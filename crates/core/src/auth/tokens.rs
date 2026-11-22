@@ -14,7 +14,7 @@ use crate::auth::user::{DbUser, Tenant};
 use crate::auth::util::{SameSite, new_cookie};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, HEADER_REFRESH_TOKEN, REFRESH_TOKEN_LENGTH,
-  SESSION_TABLE, USER_TABLE,
+  SESSION_TABLE, TENANT_MEMBER_TABLE, TENANT_TABLE, USER_TABLE,
 };
 use crate::rand::random_alphanumeric;
 use crate::util::get_header;
@@ -186,11 +186,10 @@ pub(crate) async fn mint_new_tokens(
   let tenant: Option<Tenant> = if let Some(tenant_id) = tenant_id {
     const CHECK_TENANT_QUERY: &str = formatcp!(
       "\
-        SELECT _tenant.template FROM _tenant \
-          INNER JOIN _tenant_member ON _tenant_member.tenant = _tenant.id \
+        SELECT t.template FROM \"{TENANT_TABLE}\" AS t \
+          INNER JOIN \"{TENANT_MEMBER_TABLE}\" AS m ON m.tenant = t.id \
         WHERE \
-          _tenant_member.user = $1 AND \
-          _tenant_member.tenant = $2; \
+          m.user = $1 AND m.tenant = $2; \
       "
     );
 
@@ -302,13 +301,14 @@ pub(crate) async fn reauth_with_refresh_token(
   let (db_user, tenant): (DbUser, Option<Tenant>) = if let Some(tenant_id) = tenant_id {
     const USER_AND_TENANT_QUERY: &str = formatcp!(
       "\
-        SELECT {user_columns}, _tenant.template AS template FROM \"{USER_TABLE}\" \
-          INNER JOIN _tenant_member ON _tenant_member.user = id \
-          INNER JOIN _tenant        ON _tenant_member.tenant = _tenant.id \
+        SELECT {user_columns}, t.template AS template \
+          FROM \"{USER_TABLE}\" \
+          INNER JOIN \"{TENANT_MEMBER_TABLE}\" AS m ON m.user = id \
+          INNER JOIN \"{TENANT_TABLE}\" AS t        ON m.tenant = t.id \
         WHERE \
           id = $1 AND \
           unverified_email IS NULL AND \
-          _tenant_member.tenant = $2; \
+          m.tenant = $2; \
       ",
       user_columns = DbUser::COLUMNS
     );
