@@ -45,16 +45,8 @@ fn uuid_v7(_context: &mut Context) -> Result<[u8; 16], Error> {
 }
 
 /// Format UUID blob as string-encoded UUID.
-fn uuid_text(context: &mut Context) -> Result<String, Error> {
-  if context.len() != 1 {
-    return Err(Error::InvalidParameterCount(context.len(), 1));
-  }
-
-  return Ok(
-    Uuid::from_slice(context.get_raw(0).as_blob()?)
-      .map_err(|err| Error::UserFunctionError(err.into()))?
-      .to_string(),
-  );
+fn uuid_text(context: &mut Context) -> Result<Option<String>, Error> {
+  return Ok(unpack_uuid_or_null(context)?.map(|uuid| uuid.to_string()));
 }
 
 /// Parse UUID from string-encoded UUID.

@@ -144,6 +144,14 @@ function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
       ),
     },
     {
+      id: "tenants",
+      header: "tenants",
+      size: 100,
+      cell: (ctx) => (
+        <div>{`${ctx.row.original.tenant_memberships.join(",")}`}</div>
+      ),
+    },
+    {
       id: "OAuth",
       header: () => (
         <div class="ml-3 flex items-center">
