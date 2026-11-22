@@ -1,12 +1,13 @@
-use std::assert_matches;
-
 use axum::extract::{Path, Query, RawQuery, State};
+use const_format::formatcp;
 use serde_json::json;
+use std::assert_matches;
 use trailbase_sqlite::params;
 
 use crate::app_state::*;
 use crate::auth::User;
 use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
+use crate::constants::{TENANT_MEMBER_TABLE, TENANT_TABLE};
 use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::create_record::{CreateRecordQuery, create_record_handler};
@@ -31,7 +32,7 @@ async fn add_new_tenant_with_one_member(
     state
       .user_conn()
       .write_query_row_get::<[u8; 16]>(
-        "INSERT INTO _tenant (name, template) VALUES ($1, $2) RETURNING id;",
+        formatcp!("INSERT INTO \"{TENANT_TABLE}\" (name, template) VALUES ($1, $2) RETURNING id;"),
         params!(tenant_name.to_string(), template_name.to_string()),
         0,
       )
@@ -43,7 +44,7 @@ async fn add_new_tenant_with_one_member(
   state
     .user_conn()
     .execute(
-      "INSERT INTO _tenant_member (tenant, user) VALUES ($1, $2);",
+      formatcp!("INSERT INTO \"{TENANT_MEMBER_TABLE}\" (tenant, user) VALUES ($1, $2);"),
       params!(tenant_id.into_bytes(), user.id.into_bytes()),
     )
     .await

@@ -12,7 +12,8 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 use crate::constants::{
-  COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
+  COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, TENANT_TABLE,
+  USER_TABLE,
 };
 
 pub use tower_cookies::cookie::SameSite;
@@ -335,7 +336,7 @@ pub async fn get_tenant_id_by_name(
 ) -> Result<uuid::Uuid, AuthError> {
   let id = user_conn
     .read_query_row_get::<[u8; 16]>(
-      "SELECT id FROM \"_tenant\" WHERE name = $1",
+      formatcp!("SELECT id FROM \"{TENANT_TABLE}\" WHERE name = $1"),
       params!(tenant_name.to_string()),
       0,
     )

@@ -4,6 +4,8 @@ use trailbase_schema::QualifiedName;
 
 pub const SQLITE_SCHEMA_TABLE: &str = "sqlite_schema";
 pub const USER_TABLE: &str = "_user";
+pub const TENANT_TABLE: &str = "_tenant";
+pub const TENANT_MEMBER_TABLE: &str = "_tenant_member";
 pub static USER_TABLE_FQ: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {
   name: USER_TABLE.to_string(),
   database_schema: None,

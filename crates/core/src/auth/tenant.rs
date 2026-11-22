@@ -1,7 +1,9 @@
+use const_format::formatcp;
 use trailbase_sqlite::{Connection, Row};
 use uuid::Uuid;
 
 use crate::auth::AuthError;
+use crate::constants::TENANT_TABLE;
 
 #[derive(Debug, Default, Clone)]
 pub struct DbTenant {
@@ -43,7 +45,9 @@ impl DbTenant {
 }
 
 pub async fn list_tenants(conn: &Connection) -> Result<Vec<DbTenant>, AuthError> {
-  let rows = conn.read_query_rows("SELECT * FROM _tenant", ()).await?;
+  let rows = conn
+    .read_query_rows(formatcp!("SELECT * FROM \"{TENANT_TABLE}\""), ())
+    .await?;
   return rows
     .into_iter()
     .map(DbTenant::from_row)
