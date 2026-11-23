@@ -43,6 +43,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -64,13 +65,18 @@ import { assets } from "@/components/settings/AuthSettings";
 
 import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
+import { listTenants } from "@/lib/api/tenant";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { oAuthProviderIdFromJSON } from "@proto/config";
 
-import type { UpdateUserRequest, UserJson } from "trailbase-bindings";
+import type {
+  UpdateUserRequest,
+  UserJson,
+  TenantJson,
+} from "trailbase-bindings";
 
-function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
+function buildUserColumns(): ColumnDef<StockFeatures, UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
@@ -190,6 +196,66 @@ function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
       accessorKey: "updated",
       cell: (ctx) => {
         return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
+      },
+    },
+    {
+      accessorKey: "created",
+      cell: (ctx) => {
+        return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
+      },
+    },
+  ];
+}
+
+function buildTenantColumns(): ColumnDef<StockFeatures, TenantJson>[] {
+  // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
+  return [
+    {
+      accessorKey: "id",
+      header: () => {
+        return <div class="ml-3">id</div>;
+      },
+      size: 320,
+      cell: (ctx) => {
+        const { id } = ctx.row.original;
+        return (
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(id, true);
+              }}
+            >
+              <TbOutlineClipboardCopy />
+            </Button>
+
+            <span class="font-mono text-xs">{id}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "name",
+      minSize: 180,
+      cell: (ctx) => {
+        return (
+          <span class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.name}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "template",
+      minSize: 260,
+      cell: (ctx) => {
+        return (
+          <span class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.template}
+          </span>
+        );
       },
     },
     {
@@ -407,12 +473,13 @@ function EditSheetContent(props: {
   );
 }
 
-export function AccountsPage() {
+function TenantsTab() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
     pageIndex?: string;
   }>();
+
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
@@ -420,6 +487,95 @@ export function AccountsPage() {
     };
   };
 
+  const [sorting, setSorting] = createSignal<SortingState>([]);
+
+  const client = useQueryClient();
+  const tenants = useQuery(
+    () => ({
+      queryKey: ["tenants"],
+      queryFn: async () => {
+        const p = pagination();
+        const s = sorting();
+
+        const response = await listTenants(
+          searchParams.filter,
+          p.pageSize,
+          p.pageIndex,
+          formatSortingAsOrder(s),
+        );
+
+        return response;
+      },
+    }),
+    () => client,
+  );
+
+  const refetch = () => {
+    client.invalidateQueries({
+      queryKey: ["tenants"],
+    });
+  };
+
+  const columns = createMemo(buildTenantColumns);
+  const tenantsTable = buildTable(
+    {
+      columns,
+      data: () => tenants.data?.tenants ?? [],
+      rowCount: () => Number(tenants.data?.total_row_count ?? -1),
+      pagination,
+      onPaginationChange: (s: PaginationState) => {
+        setSearchParams({
+          ...searchParams,
+          pageIndex: s.pageIndex,
+          pageSize: s.pageSize,
+        });
+      },
+    },
+    {
+      manualSorting: true,
+      state: {
+        sorting,
+      },
+      onSortingChange: setSorting,
+    },
+  );
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Switch>
+        <Match when={tenants.isError}>
+          <span>Error: {tenants.error?.toString()}</span>
+        </Match>
+
+        <Match when={true}>
+          <div class="w-full space-y-2.5">
+            <Table
+              table={tenantsTable}
+              loading={tenants.isLoading}
+              onRowClick={(_idx: number, row: TenantJson) => {
+                // setEditUser(row);
+              }}
+            />
+          </div>
+        </Match>
+      </Switch>
+    </Suspense>
+  );
+}
+
+export function AccountsPage() {
+  const [searchParams, setSearchParams] = useSearchParams<{
+    filter?: string;
+    pageSize?: string;
+    pageIndex?: string;
+  }>();
+
+  const pagination = (): PaginationState => {
+    return {
+      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
+    };
+  };
   const setFilter = (filter: string | undefined) => {
     setSearchParams({
       ...searchParams,
@@ -433,29 +589,32 @@ export function AccountsPage() {
 
   // NOTE: admin user endpoint doesn't support offset, we have to cursor through
   // and cannot just jump to page N.
-  const users = useQuery(() => ({
-    queryKey: [
-      "users",
-      searchParams.filter,
-      pagination().pageSize,
-      pagination().pageIndex,
-      sorting(),
-    ],
-    queryFn: async () => {
-      const p = pagination();
-      const s = sorting();
-
-      const response = await fetchUsers(
-        searchParams.filter,
-        p.pageSize,
-        p.pageIndex,
-        formatSortingAsOrder(s),
-      );
-
-      return response;
-    },
-  }));
   const client = useQueryClient();
+  const users = useQuery(
+    () => ({
+      queryKey: [
+        "users",
+        searchParams.filter,
+        pagination().pageSize,
+        pagination().pageIndex,
+        sorting(),
+      ],
+      queryFn: async () => {
+        const p = pagination();
+        const s = sorting();
+
+        const response = await fetchUsers(
+          searchParams.filter,
+          p.pageSize,
+          p.pageIndex,
+          formatSortingAsOrder(s),
+        );
+
+        return response;
+      },
+    }),
+    () => client,
+  );
   const refetch = () => {
     client.invalidateQueries({
       queryKey: ["users"],
@@ -463,7 +622,7 @@ export function AccountsPage() {
   };
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
-  const columns = createMemo(buildColumns);
+  const columns = createMemo(buildUserColumns);
   const accountsTable = buildTable(
     {
       columns,
@@ -530,64 +689,77 @@ export function AccountsPage() {
         }
       />
 
-      <div class="flex flex-col items-end gap-4 p-4">
-        <FilterBar
-          initial={searchParams.filter}
-          onSubmit={(value: string) => {
-            if (value === searchParams.filter) {
-              refetch();
-            } else {
-              setFilter(value);
-            }
-          }}
-          placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
-        />
+      <Tabs defaultValue="users">
+        <TabsList class="mx-4 my-2 grid grid-cols-2">
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+        </TabsList>
 
-        <Suspense fallback={<div>Loading...</div>}>
-          <Switch>
-            <Match when={users.isError}>
-              <span>Error: {users.error?.toString()}</span>
-            </Match>
-
-            <Match when={true}>
-              <div class="w-full space-y-2.5">
-                <Table
-                  table={accountsTable}
-                  loading={users.isLoading}
-                  onRowClick={(_idx: number, row: UserJson) => {
-                    setEditUser(row);
-                  }}
-                />
-              </div>
-            </Match>
-          </Switch>
-
-          {/* WARN: This might open multiple sheets or at least scrims for each row */}
-          <SafeSheet
-            open={[
-              () => editUser() !== undefined,
-              (isOpen: boolean | ((value: boolean) => boolean)) => {
-                if (!isOpen) {
-                  setEditUser(undefined);
+        <TabsContent value="users">
+          <div class="flex flex-col items-end gap-4 p-4">
+            <FilterBar
+              initial={searchParams.filter}
+              onSubmit={(value: string) => {
+                if (value === searchParams.filter) {
+                  refetch();
+                } else {
+                  setFilter(value);
                 }
-              },
-            ]}
-            children={(sheet) => {
-              return (
-                <SheetContent class={sheetMaxWidth}>
-                  <Show when={editUser()}>
-                    <EditSheetContent
-                      user={editUser()!}
-                      refetch={refetch}
-                      {...sheet}
+              }}
+              placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
+            />
+
+            <Suspense fallback={<div>Loading...</div>}>
+              <Switch>
+                <Match when={users.isError}>
+                  <span>Error: {users.error?.toString()}</span>
+                </Match>
+
+                <Match when={true}>
+                  <div class="w-full space-y-2.5">
+                    <Table
+                      table={accountsTable}
+                      loading={users.isLoading}
+                      onRowClick={(_idx: number, row: UserJson) => {
+                        setEditUser(row);
+                      }}
                     />
-                  </Show>
-                </SheetContent>
-              );
-            }}
-          />
-        </Suspense>
-      </div>
+                  </div>
+                </Match>
+              </Switch>
+
+              {/* WARN: This might open multiple sheets or at least scrims for each row */}
+              <SafeSheet
+                open={[
+                  () => editUser() !== undefined,
+                  (isOpen: boolean | ((value: boolean) => boolean)) => {
+                    if (!isOpen) {
+                      setEditUser(undefined);
+                    }
+                  },
+                ]}
+                children={(sheet) => {
+                  return (
+                    <SheetContent class={sheetMaxWidth}>
+                      <Show when={editUser()}>
+                        <EditSheetContent
+                          user={editUser()!}
+                          refetch={refetch}
+                          {...sheet}
+                        />
+                      </Show>
+                    </SheetContent>
+                  );
+                }}
+              />
+            </Suspense>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="tenants" class="flex flex-col gap-8 p-4">
+          <TenantsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
