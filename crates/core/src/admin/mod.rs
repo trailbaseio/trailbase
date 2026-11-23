@@ -77,7 +77,11 @@ pub fn unprotected_admin_router() -> OpenApiRouter<AppState> {
       user::delete_user::delete_user_handler,
     ))
     // Tenant actions
-    .routes(routes!(tenant::list_tenants::list_tenants_handler,))
+    .routes(routes!(
+      tenant::list_tenants::list_tenants_handler,
+      tenant::create_tenant::create_tenant_handler,
+      tenant::delete_tenant::delete_tenant_handler,
+    ))
     .routes(routes!(mint::mint_auth_tokens))
     // Schema actions
     .routes(routes!(json_schema::list_schemas_handler))

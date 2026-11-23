@@ -5,7 +5,6 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use trailbase_schema::QualifiedName;
 use trailbase_sqlvalue::{Blob, SqlValue};
 use ts_rs::TS;
 
@@ -13,6 +12,7 @@ use crate::admin::AdminError as Error;
 use crate::admin::rows::delete_rows::delete_row;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
+use crate::constants::USER_TABLE_FQ;
 use crate::util::uuid_to_b64;
 
 #[derive(Debug, Deserialize, Default, TS, utoipa::ToSchema)]
@@ -42,10 +42,7 @@ pub async fn delete_user_handler(
 
   delete_row(
     &state,
-    &QualifiedName {
-      name: "_user".to_string(),
-      database_schema: None,
-    },
+    &USER_TABLE_FQ,
     "id",
     SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&request.id))),
   )

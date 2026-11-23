@@ -19,10 +19,6 @@ mod tests {
 
   #[tokio::test]
   async fn test_user_creation_and_deletion() {
-    let _ = env_logger::try_init_from_env(
-      env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn"),
-    );
-
     let mailer = TestAsyncSmtpTransport::new();
     let state = test_state(Some(TestStateOptions {
       mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
