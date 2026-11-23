@@ -43,6 +43,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -64,6 +65,7 @@ import { assets } from "@/components/settings/AuthSettings";
 
 import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
+import { listTenants } from "@/lib/api/tenant";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { oAuthProviderIdFromJSON } from "@proto/config";
@@ -407,12 +409,13 @@ function EditSheetContent(props: {
   );
 }
 
-export function AccountsPage() {
+function TenantsTab() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
     pageIndex?: string;
   }>();
+
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
@@ -420,6 +423,51 @@ export function AccountsPage() {
     };
   };
 
+  const [sorting, _setSorting] = createSignal<SortingState>([]);
+
+  const client = useQueryClient();
+  const tenants = useQuery(
+    () => ({
+      queryKey: ["tenants"],
+      queryFn: async () => {
+        const p = pagination();
+        const s = sorting();
+
+        const response = await listTenants(
+          searchParams.filter,
+          p.pageSize,
+          p.pageIndex,
+          formatSortingAsOrder(s),
+        );
+
+        return response;
+      },
+    }),
+    () => client,
+  );
+
+  const refetch = () => {
+    client.invalidateQueries({
+      queryKey: ["tenants"],
+    });
+  };
+
+  return <>{JSON.stringify(tenants.data?.tenants)}</>;
+}
+
+export function AccountsPage() {
+  const [searchParams, setSearchParams] = useSearchParams<{
+    filter?: string;
+    pageSize?: string;
+    pageIndex?: string;
+  }>();
+
+  const pagination = (): PaginationState => {
+    return {
+      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
+    };
+  };
   const setFilter = (filter: string | undefined) => {
     setSearchParams({
       ...searchParams,
@@ -433,29 +481,32 @@ export function AccountsPage() {
 
   // NOTE: admin user endpoint doesn't support offset, we have to cursor through
   // and cannot just jump to page N.
-  const users = useQuery(() => ({
-    queryKey: [
-      "users",
-      searchParams.filter,
-      pagination().pageSize,
-      pagination().pageIndex,
-      sorting(),
-    ],
-    queryFn: async () => {
-      const p = pagination();
-      const s = sorting();
-
-      const response = await fetchUsers(
-        searchParams.filter,
-        p.pageSize,
-        p.pageIndex,
-        formatSortingAsOrder(s),
-      );
-
-      return response;
-    },
-  }));
   const client = useQueryClient();
+  const users = useQuery(
+    () => ({
+      queryKey: [
+        "users",
+        searchParams.filter,
+        pagination().pageSize,
+        pagination().pageIndex,
+        sorting(),
+      ],
+      queryFn: async () => {
+        const p = pagination();
+        const s = sorting();
+
+        const response = await fetchUsers(
+          searchParams.filter,
+          p.pageSize,
+          p.pageIndex,
+          formatSortingAsOrder(s),
+        );
+
+        return response;
+      },
+    }),
+    () => client,
+  );
   const refetch = () => {
     client.invalidateQueries({
       queryKey: ["users"],
@@ -530,64 +581,77 @@ export function AccountsPage() {
         }
       />
 
-      <div class="flex flex-col items-end gap-4 p-4">
-        <FilterBar
-          initial={searchParams.filter}
-          onSubmit={(value: string) => {
-            if (value === searchParams.filter) {
-              refetch();
-            } else {
-              setFilter(value);
-            }
-          }}
-          placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
-        />
+      <Tabs defaultValue="users">
+        <TabsList class="mx-4 my-2 grid grid-cols-2">
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+        </TabsList>
 
-        <Suspense fallback={<div>Loading...</div>}>
-          <Switch>
-            <Match when={users.isError}>
-              <span>Error: {users.error?.toString()}</span>
-            </Match>
-
-            <Match when={true}>
-              <div class="w-full space-y-2.5">
-                <Table
-                  table={accountsTable}
-                  loading={users.isLoading}
-                  onRowClick={(_idx: number, row: UserJson) => {
-                    setEditUser(row);
-                  }}
-                />
-              </div>
-            </Match>
-          </Switch>
-
-          {/* WARN: This might open multiple sheets or at least scrims for each row */}
-          <SafeSheet
-            open={[
-              () => editUser() !== undefined,
-              (isOpen: boolean | ((value: boolean) => boolean)) => {
-                if (!isOpen) {
-                  setEditUser(undefined);
+        <TabsContent value="users">
+          <div class="flex flex-col items-end gap-4 p-4">
+            <FilterBar
+              initial={searchParams.filter}
+              onSubmit={(value: string) => {
+                if (value === searchParams.filter) {
+                  refetch();
+                } else {
+                  setFilter(value);
                 }
-              },
-            ]}
-            children={(sheet) => {
-              return (
-                <SheetContent class={sheetMaxWidth}>
-                  <Show when={editUser()}>
-                    <EditSheetContent
-                      user={editUser()!}
-                      refetch={refetch}
-                      {...sheet}
+              }}
+              placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
+            />
+
+            <Suspense fallback={<div>Loading...</div>}>
+              <Switch>
+                <Match when={users.isError}>
+                  <span>Error: {users.error?.toString()}</span>
+                </Match>
+
+                <Match when={true}>
+                  <div class="w-full space-y-2.5">
+                    <Table
+                      table={accountsTable}
+                      loading={users.isLoading}
+                      onRowClick={(_idx: number, row: UserJson) => {
+                        setEditUser(row);
+                      }}
                     />
-                  </Show>
-                </SheetContent>
-              );
-            }}
-          />
-        </Suspense>
-      </div>
+                  </div>
+                </Match>
+              </Switch>
+
+              {/* WARN: This might open multiple sheets or at least scrims for each row */}
+              <SafeSheet
+                open={[
+                  () => editUser() !== undefined,
+                  (isOpen: boolean | ((value: boolean) => boolean)) => {
+                    if (!isOpen) {
+                      setEditUser(undefined);
+                    }
+                  },
+                ]}
+                children={(sheet) => {
+                  return (
+                    <SheetContent class={sheetMaxWidth}>
+                      <Show when={editUser()}>
+                        <EditSheetContent
+                          user={editUser()!}
+                          refetch={refetch}
+                          {...sheet}
+                        />
+                      </Show>
+                    </SheetContent>
+                  );
+                }}
+              />
+            </Suspense>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="tenants" class="flex flex-col gap-8 p-4">
+          <TenantsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
