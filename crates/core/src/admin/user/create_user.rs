@@ -114,7 +114,7 @@ pub async fn create_user_handler(
     .map(DbUser::from_row)
     .transpose()?
   else {
-    return Err(Error::Precondition("Internal".into()));
+    return Err(Error::Internal("Insert returned no user".into()));
   };
 
   // Send an email
