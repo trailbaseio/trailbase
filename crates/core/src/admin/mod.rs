@@ -14,6 +14,7 @@ mod parse;
 mod query;
 pub(crate) mod rows;
 mod table;
+mod tenant;
 pub(crate) mod user;
 mod util;
 mod wasm;
@@ -75,6 +76,8 @@ pub fn unprotected_admin_router() -> OpenApiRouter<AppState> {
       user::update_user::update_user_handler,
       user::delete_user::delete_user_handler,
     ))
+    // Tenant actions
+    .routes(routes!(tenant::list_tenants::list_tenants_handler,))
     .routes(routes!(mint::mint_auth_tokens))
     // Schema actions
     .routes(routes!(json_schema::list_schemas_handler))

@@ -64,7 +64,7 @@ pub struct ListUsersResponse {
   path = "/user",
   tag = "admin",
   responses(
-    (status = 200, description = "Success"),
+    (status = 200, description = "List of (filtered) users including total count."),
   )
 )]
 pub async fn list_users_handler(
