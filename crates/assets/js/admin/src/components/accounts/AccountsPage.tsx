@@ -70,9 +70,13 @@ import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { oAuthProviderIdFromJSON } from "@proto/config";
 
-import type { UpdateUserRequest, UserJson } from "trailbase-bindings";
+import type {
+  UpdateUserRequest,
+  UserJson,
+  TenantJson,
+} from "trailbase-bindings";
 
-function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
+function buildUserColumns(): ColumnDef<StockFeatures, UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
@@ -192,6 +196,66 @@ function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
       accessorKey: "updated",
       cell: (ctx) => {
         return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
+      },
+    },
+    {
+      accessorKey: "created",
+      cell: (ctx) => {
+        return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
+      },
+    },
+  ];
+}
+
+function buildTenantColumns(): ColumnDef<StockFeatures, TenantJson>[] {
+  // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
+  return [
+    {
+      accessorKey: "id",
+      header: () => {
+        return <div class="ml-3">id</div>;
+      },
+      size: 320,
+      cell: (ctx) => {
+        const { id } = ctx.row.original;
+        return (
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(id, true);
+              }}
+            >
+              <TbOutlineClipboardCopy />
+            </Button>
+
+            <span class="font-mono text-xs">{id}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "name",
+      minSize: 180,
+      cell: (ctx) => {
+        return (
+          <span class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.name}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "template",
+      minSize: 260,
+      cell: (ctx) => {
+        return (
+          <span class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.template}
+          </span>
+        );
       },
     },
     {
@@ -423,7 +487,7 @@ function TenantsTab() {
     };
   };
 
-  const [sorting, _setSorting] = createSignal<SortingState>([]);
+  const [sorting, setSorting] = createSignal<SortingState>([]);
 
   const client = useQueryClient();
   const tenants = useQuery(
@@ -452,7 +516,51 @@ function TenantsTab() {
     });
   };
 
-  return <>{JSON.stringify(tenants.data?.tenants)}</>;
+  const columns = createMemo(buildTenantColumns);
+  const tenantsTable = buildTable(
+    {
+      columns,
+      data: () => tenants.data?.tenants ?? [],
+      rowCount: () => Number(tenants.data?.total_row_count ?? -1),
+      pagination,
+      onPaginationChange: (s: PaginationState) => {
+        setSearchParams({
+          ...searchParams,
+          pageIndex: s.pageIndex,
+          pageSize: s.pageSize,
+        });
+      },
+    },
+    {
+      manualSorting: true,
+      state: {
+        sorting,
+      },
+      onSortingChange: setSorting,
+    },
+  );
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Switch>
+        <Match when={tenants.isError}>
+          <span>Error: {tenants.error?.toString()}</span>
+        </Match>
+
+        <Match when={true}>
+          <div class="w-full space-y-2.5">
+            <Table
+              table={tenantsTable}
+              loading={tenants.isLoading}
+              onRowClick={(_idx: number, row: TenantJson) => {
+                // setEditUser(row);
+              }}
+            />
+          </div>
+        </Match>
+      </Switch>
+    </Suspense>
+  );
 }
 
 export function AccountsPage() {
@@ -514,7 +622,7 @@ export function AccountsPage() {
   };
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
-  const columns = createMemo(buildColumns);
+  const columns = createMemo(buildUserColumns);
   const accountsTable = buildTable(
     {
       columns,
