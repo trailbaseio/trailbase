@@ -60,16 +60,16 @@ base64 = { version = "0.23.1", default-features = false, features = ["alloc", "s
 bytes = { version = "1.12.2", features = ["serde"] }
 chrono = { version = "0.4.45", default-features = false }
 compact_str = { version = "0.10.0", default-features = false, features = ["serde"] }
-clap = { version = "^4.6.9", features=["derive", "env"] }
+clap = { version = "^4.6.10", features=["derive", "env"] }
 cron = "0.17.0"
 crossfire = { version = "3.1.23", default-features = false, features = ["tokio"] }
-env_logger = { version = "^0.11.11", default-features = false, features = ["auto-color", "humantime"] }
+env_logger = { version = "^0.11.12", default-features = false, features = ["auto-color", "humantime"] }
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["alloc", "spin"] }
 geos = { version = "11.3.1", default-features = false, features = ["geo", "json"] }
 http = { version = "1.5.0", default-features = false }
 http-body-util = { version = "0.1.5", default-features = false }
-hyper = { version = "1.12.0", default-features = false }
+hyper = { version = "1.13.0", default-features = false }
 itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
 jsonwebtoken = { version = "12.0.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 # libsqlite3-sys = { version = "0.38.2", default-features = false, features = ["bundled", "preupdate_hook"] }

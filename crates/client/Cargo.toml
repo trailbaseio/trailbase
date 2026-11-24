@@ -36,7 +36,7 @@ serde_json = { workspace = true }
 serde_repr = "0.1.21"
 thiserror = "2.0.21"
 tracing = "0.1.44"
-url = "2.5.8"
+url = "2.5.9"
 
 [dev-dependencies]
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }

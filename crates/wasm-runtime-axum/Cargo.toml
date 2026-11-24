@@ -10,7 +10,7 @@ doctest = false
 axum = { workspace = true }
 bytes = { workspace = true }
 cron = { workspace = true }
-form_urlencoded = "1.2.2"
+form_urlencoded = "1.2.3"
 futures-util = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
@@ -22,7 +22,7 @@ tokio = { workspace = true }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
-url = "2.5.8"
+url = "2.5.9"
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 

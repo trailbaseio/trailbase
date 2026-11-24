@@ -19,7 +19,7 @@ siphasher = "1.0"
 thiserror = "2"
 trailbase-sqlite = { workspace = true }
 time = { version = "0.3.55", features = ["parsing", "formatting"] }
-walkdir = "2.5.0"
+walkdir = "2.5.1"
 
 [dev-dependencies]
 temp-dir = "0.2.0"

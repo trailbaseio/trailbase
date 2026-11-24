@@ -9,7 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [dependencies]
-anyhow = "1.0.104"
+anyhow = "1.0.105"
 base64 = { workspace = true }
 bytes = { version = "1.12.2", default-features = false }
 futures-util = { workspace = true }
@@ -23,6 +23,6 @@ static_assertions = "1.1.0"
 thiserror = "2.0.21"
 trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
-url = "2.5.8"
+url = "2.5.9"
 wit-bindgen = "0.63.0"
 wstd = "0.6.8"
