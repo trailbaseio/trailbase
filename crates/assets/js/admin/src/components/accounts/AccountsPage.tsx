@@ -6,6 +6,7 @@ import {
   Show,
   Switch,
   Suspense,
+  onMount,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
@@ -473,7 +474,7 @@ function EditSheetContent(props: {
   );
 }
 
-function TenantsTab() {
+function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
@@ -540,6 +541,49 @@ function TenantsTab() {
     },
   );
 
+  onMount(() => {
+    props.setHeader(
+      <Header
+        title="Accounts"
+        description={
+          <Show when={tenants.data}>
+            {(data) => <span>{Number(data().total_row_count)} tenants</span>}
+          </Show>
+        }
+        left={
+          <IconButton onClick={refetch}>
+            <TbOutlineRefresh />
+          </IconButton>
+        }
+        right={
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>test</SheetContent>
+
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button
+                        variant="outline"
+                        class="flex gap-2"
+                        onClick={() => {}}
+                        {...props}
+                      >
+                        <span>Add</span>
+                        <TbOutlineUser />
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        }
+      />,
+    );
+  });
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Switch>
@@ -553,7 +597,7 @@ function TenantsTab() {
               table={tenantsTable}
               loading={tenants.isLoading}
               onRowClick={(_idx: number, row: TenantJson) => {
-                // setEditUser(row);
+                return null;
               }}
             />
           </div>
@@ -563,7 +607,7 @@ function TenantsTab() {
   );
 }
 
-export function AccountsPage() {
+function UserAccountsTab(props: { setHeader: (header: JSX.Element) => void }) {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
@@ -646,13 +690,13 @@ export function AccountsPage() {
     },
   );
 
-  return (
-    <div class="size-full scrollbar-thin md:overflow-y-auto">
+  onMount(() => {
+    props.setHeader(
       <Header
         title="Accounts"
         description={
           <Show when={users.data}>
-            {(data) => <span>{Number(data().total_row_count)} accounts</span>}
+            {(data) => <span>{Number(data().total_row_count)} users</span>}
           </Show>
         }
         left={
@@ -687,7 +731,78 @@ export function AccountsPage() {
             }}
           />
         }
+      />,
+    );
+  });
+
+  return (
+    <div class="flex flex-col items-end gap-4 p-4">
+      <FilterBar
+        initial={searchParams.filter}
+        onSubmit={(value: string) => {
+          if (value === searchParams.filter) {
+            refetch();
+          } else {
+            setFilter(value);
+          }
+        }}
+        placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
       />
+
+      <Suspense fallback={<div>Loading...</div>}>
+        <Switch>
+          <Match when={users.isError}>
+            <span>Error: {users.error?.toString()}</span>
+          </Match>
+
+          <Match when={true}>
+            <div class="w-full space-y-2.5">
+              <Table
+                table={accountsTable}
+                loading={users.isLoading}
+                onRowClick={(_idx: number, row: UserJson) => {
+                  setEditUser(row);
+                }}
+              />
+            </div>
+          </Match>
+        </Switch>
+
+        {/* WARN: This might open multiple sheets or at least scrims for each row */}
+        <SafeSheet
+          open={[
+            () => editUser() !== undefined,
+            (isOpen: boolean | ((value: boolean) => boolean)) => {
+              if (!isOpen) {
+                setEditUser(undefined);
+              }
+            },
+          ]}
+          children={(sheet) => {
+            return (
+              <SheetContent class={sheetMaxWidth}>
+                <Show when={editUser()}>
+                  <EditSheetContent
+                    user={editUser()!}
+                    refetch={refetch}
+                    {...sheet}
+                  />
+                </Show>
+              </SheetContent>
+            );
+          }}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+export function AccountsPage() {
+  const [header, setHeader] = createSignal<JSX.Element | null>(null);
+
+  return (
+    <div class="size-full scrollbar-thin md:overflow-y-auto">
+      {header()}
 
       <Tabs defaultValue="users">
         <TabsList class="mx-4 my-2 grid grid-cols-2">
@@ -696,68 +811,11 @@ export function AccountsPage() {
         </TabsList>
 
         <TabsContent value="users">
-          <div class="flex flex-col items-end gap-4 p-4">
-            <FilterBar
-              initial={searchParams.filter}
-              onSubmit={(value: string) => {
-                if (value === searchParams.filter) {
-                  refetch();
-                } else {
-                  setFilter(value);
-                }
-              }}
-              placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
-            />
-
-            <Suspense fallback={<div>Loading...</div>}>
-              <Switch>
-                <Match when={users.isError}>
-                  <span>Error: {users.error?.toString()}</span>
-                </Match>
-
-                <Match when={true}>
-                  <div class="w-full space-y-2.5">
-                    <Table
-                      table={accountsTable}
-                      loading={users.isLoading}
-                      onRowClick={(_idx: number, row: UserJson) => {
-                        setEditUser(row);
-                      }}
-                    />
-                  </div>
-                </Match>
-              </Switch>
-
-              {/* WARN: This might open multiple sheets or at least scrims for each row */}
-              <SafeSheet
-                open={[
-                  () => editUser() !== undefined,
-                  (isOpen: boolean | ((value: boolean) => boolean)) => {
-                    if (!isOpen) {
-                      setEditUser(undefined);
-                    }
-                  },
-                ]}
-                children={(sheet) => {
-                  return (
-                    <SheetContent class={sheetMaxWidth}>
-                      <Show when={editUser()}>
-                        <EditSheetContent
-                          user={editUser()!}
-                          refetch={refetch}
-                          {...sheet}
-                        />
-                      </Show>
-                    </SheetContent>
-                  );
-                }}
-              />
-            </Suspense>
-          </div>
+          <UserAccountsTab setHeader={setHeader} />
         </TabsContent>
 
         <TabsContent value="tenants" class="flex flex-col gap-8 p-4">
-          <TenantsTab />
+          <TenantsTab setHeader={setHeader} />
         </TabsContent>
       </Tabs>
     </div>
