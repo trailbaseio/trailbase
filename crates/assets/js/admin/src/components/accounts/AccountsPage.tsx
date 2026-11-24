@@ -18,6 +18,7 @@ import {
   TbOutlineRefresh,
   TbOutlineTrash,
   TbOutlineUser,
+  TbOutlineUsersGroup,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -36,6 +37,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FilterBar } from "@/components/FilterBar";
 import {
   SheetContent,
@@ -294,6 +296,7 @@ function DeleteTenantButton(props: {
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [deleteDb, setDeleteDb] = createSignal(false);
 
   return (
     <Dialog
@@ -310,6 +313,16 @@ function DeleteTenantButton(props: {
           <span class="font-bold">{props.tenantName}</span>?
         </p>
 
+        <div
+          class="flex items-center gap-2"
+          onClick={() => {
+            setDeleteDb((old) => !old);
+          }}
+        >
+          <Checkbox checked={deleteDb()} />
+          Delete database file?
+        </div>
+
         <DialogFooter>
           <div class="flex w-full justify-between">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -321,7 +334,10 @@ function DeleteTenantButton(props: {
               onClick={() => {
                 (async () => {
                   try {
-                    await deleteTenant({ id: props.tenantId });
+                    await deleteTenant({
+                      id: props.tenantId,
+                      remove_database: deleteDb(),
+                    });
                   } finally {
                     props.onDelete();
                   }
@@ -663,7 +679,7 @@ function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
                         {...props}
                       >
                         <span>Add</span>
-                        <TbOutlineUser />
+                        <TbOutlineUsersGroup />
                       </Button>
                     )}
                   />
