@@ -58,6 +58,7 @@ import { Table, buildTable } from "@/components/table/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
+import { AddTenant } from "@/components/accounts/AddTenant";
 import {
   buildTextFormField,
   buildSecretFormField,
@@ -71,6 +72,7 @@ import { deleteTenant, listTenants } from "@/lib/api/tenant";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { oAuthProviderIdFromJSON } from "@proto/config";
+import { createConfigQuery } from "@/lib/api/config";
 
 import type {
   UpdateUserRequest,
@@ -209,7 +211,9 @@ function buildUserColumns(): ColumnDef<StockFeatures, UserJson>[] {
   ];
 }
 
-function buildTenantColumns(): ColumnDef<StockFeatures, TenantJson>[] {
+function buildTenantColumns(
+  refetch: () => void,
+): ColumnDef<StockFeatures, TenantJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
@@ -274,7 +278,9 @@ function buildTenantColumns(): ColumnDef<StockFeatures, TenantJson>[] {
           <DeleteTenantButton
             tenantId={tenant.id}
             tenantName={tenant.name}
-            onDelete={() => {}}
+            onDelete={() => {
+              refetch();
+            }}
           />
         );
       },
@@ -548,6 +554,12 @@ function EditSheetContent(props: {
 }
 
 function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
+  const config = createConfigQuery();
+  const tenantTemplates = (): string[] =>
+    config?.data?.config?.tenantTemplates
+      ?.map((t) => t.name)
+      .filter((t) => t !== undefined) ?? [];
+
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
@@ -590,7 +602,7 @@ function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
     });
   };
 
-  const columns = createMemo(buildTenantColumns);
+  const columns = createMemo(() => buildTenantColumns(refetch));
   const tenantsTable = buildTable(
     {
       columns,
@@ -633,11 +645,18 @@ function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
             children={(sheet) => {
               return (
                 <>
-                  <SheetContent class={sheetMaxWidth}>test</SheetContent>
+                  <SheetContent class={sheetMaxWidth}>
+                    <AddTenant
+                      tenantRefetch={refetch}
+                      tenantTemplates={tenantTemplates()}
+                      {...sheet}
+                    />
+                  </SheetContent>
 
                   <SheetTrigger
                     as={(props: DialogTriggerProps) => (
                       <Button
+                        disabled={tenantTemplates().length === 0}
                         variant="outline"
                         class="flex gap-2"
                         onClick={() => {}}
