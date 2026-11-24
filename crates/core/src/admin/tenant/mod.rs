@@ -62,7 +62,10 @@ mod tests {
 
     delete_tenant::delete_tenant_handler(
       State(state.clone()),
-      Json(delete_tenant::DeleteTenantRequest { id }),
+      Json(delete_tenant::DeleteTenantRequest {
+        id,
+        remove_database: Some(false),
+      }),
     )
     .await
     .unwrap();

@@ -42,9 +42,9 @@ pub async fn create_tenant_handler(
     .find(|t| t.name.as_ref() == Some(&request.template))
     .is_none()
   {
-    return Err(Error::Precondition(
-      format!("template not found: {request:?}").into(),
-    ));
+    return Err(Error::Precondition(format!(
+      "template not found: {request:?}"
+    )));
   }
 
   const INSERT_TENANT_QUERY: &str = formatcp!(
