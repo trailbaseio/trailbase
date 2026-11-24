@@ -16,6 +16,7 @@ import {
   TbOutlineCrown,
   TbOutlineQuestionMark,
   TbOutlineRefresh,
+  TbOutlineTrash,
   TbOutlineUser,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
@@ -66,7 +67,7 @@ import { assets } from "@/components/settings/AuthSettings";
 
 import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
-import { listTenants } from "@/lib/api/tenant";
+import { deleteTenant, listTenants } from "@/lib/api/tenant";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { oAuthProviderIdFromJSON } from "@proto/config";
@@ -265,7 +266,79 @@ function buildTenantColumns(): ColumnDef<StockFeatures, TenantJson>[] {
         return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
       },
     },
+    {
+      id: "delete",
+      cell: (ctx) => {
+        const tenant = ctx.row.original;
+        return (
+          <DeleteTenantButton
+            tenantId={tenant.id}
+            tenantName={tenant.name}
+            onDelete={() => {}}
+          />
+        );
+      },
+    },
   ];
+}
+
+function DeleteTenantButton(props: {
+  tenantId: string;
+  tenantName: string;
+  onDelete: () => void;
+}) {
+  const [dialogOpen, setDialogOpen] = createSignal(false);
+
+  return (
+    <Dialog
+      id="confirm"
+      modal={true}
+      open={dialogOpen()}
+      onOpenChange={setDialogOpen}
+    >
+      <DialogContent>
+        <DialogTitle>Confirmation</DialogTitle>
+
+        <p>
+          Are you sure you want to permanently delete{" "}
+          <span class="font-bold">{props.tenantName}</span>?
+        </p>
+
+        <DialogFooter>
+          <div class="flex w-full justify-between">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Back
+            </Button>
+
+            <Button
+              variant="destructive"
+              onClick={() => {
+                (async () => {
+                  try {
+                    await deleteTenant({ id: props.tenantId });
+                  } finally {
+                    props.onDelete();
+                  }
+                })();
+
+                setDialogOpen(false);
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+
+      <Button
+        class="bg-destructive text-white"
+        onClick={() => setDialogOpen(true)}
+        size="icon"
+      >
+        <TbOutlineTrash />
+      </Button>
+    </Dialog>
+  );
 }
 
 function DeleteUserButton(props: {
