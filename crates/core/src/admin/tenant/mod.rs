@@ -36,7 +36,7 @@ mod tests {
         }),
       )
       .await,
-      Err(AdminError::Precondition(_))
+      Err(AdminError::Auth(crate::auth::AuthError::BadRequest(_)))
     );
 
     let Json(CreateTenantResponse { id }) = create_tenant::create_tenant_handler(

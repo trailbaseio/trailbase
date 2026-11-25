@@ -209,6 +209,9 @@ async fn async_main(
 
           write_new_migration_file(&dir, suffix.as_deref())?;
         }
+        Some(TenantCommands::NewTenant { name, template }) => {
+          trailbase::api::create_new_tenant(&state, template, name).await?;
+        }
         None => {
           CommandLineArgs::command()
             .find_subcommand_mut("tenant")

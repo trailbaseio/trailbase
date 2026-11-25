@@ -2,6 +2,7 @@ use const_format::formatcp;
 use trailbase_sqlite::{Connection, Row};
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::AuthError;
 use crate::constants::TENANT_TABLE;
 
@@ -52,4 +53,49 @@ pub async fn list_tenants(conn: &Connection) -> Result<Vec<DbTenant>, AuthError>
     .into_iter()
     .map(DbTenant::from_row)
     .collect::<Result<Vec<_>, _>>();
+}
+
+pub async fn create_new_tenant(
+  state: &AppState,
+  template: String,
+  name: String,
+) -> Result<Uuid, AuthError> {
+  let templates = state.access_config(|c| c.tenant_templates.clone());
+
+  if templates
+    .iter()
+    .find(|t| t.name.as_ref() == Some(&template))
+    .is_none()
+  {
+    return Err(AuthError::BadRequest("template not found"));
+  }
+
+  const INSERT_TENANT_QUERY: &str = formatcp!(
+    "\
+      INSERT INTO \"{TENANT_TABLE}\" \
+        (template, name) \
+      VALUES \
+        (:template, :name) \
+      RETURNING {columns} \
+    ",
+    columns = DbTenant::COLUMNS,
+  );
+
+  let Some(tenant) = state
+    .user_conn()
+    .write_query_row(
+      INSERT_TENANT_QUERY,
+      trailbase_sqlite::named_params! {
+        ":name": name,
+        ":template": template,
+      },
+    )
+    .await?
+    .map(DbTenant::from_row)
+    .transpose()?
+  else {
+    return Err(AuthError::Internal("Insert returned no tenant".into()));
+  };
+
+  return Ok(Uuid::from_bytes(tenant.id));
 }
