@@ -67,11 +67,16 @@ async fn add_new_tenant_with_one_member(
 #[cfg(not(feature = "pg-test"))]
 #[tokio::test]
 async fn multi_tenant_record_api_create() {
+  const API_NAME: &str = "simple_api";
+  const TEMPLATE_NAME: &str = "test_template";
+
   let config = {
     let mut config = test_config();
-
-    // TODO: Configure tenant templates.
-
+    config
+      .tenant_templates
+      .push(crate::config::proto::TenantTemplateConfig {
+        name: Some(TEMPLATE_NAME.to_string()),
+      });
     config
   };
 
@@ -81,9 +86,6 @@ async fn multi_tenant_record_api_create() {
   }))
   .await
   .unwrap();
-
-  const API_NAME: &str = "simple_api";
-  const TEMPLATE_NAME: &str = "test_template";
 
   let (
     tenant_x,

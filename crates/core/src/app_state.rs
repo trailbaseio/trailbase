@@ -169,33 +169,23 @@ impl AppState {
     //    * We don't ever want lazy creation of tenant DBs on request path unless there's a good reason for such extra complexity.
     //  * P4: Apply new migrations on SIGHUP (we don't do this right for any DBs.
     {
-      let templates: Vec<_> = config
-        .tenant_templates
-        .iter()
-        .filter_map(|t| {
-          return if let Some(ref name) = t.name
-            && !name.is_empty()
-          {
-            Some(name.to_owned())
-          } else {
-            None
-          };
-        })
-        .collect();
-
       // Make sure directories exist for all tenants listed in the config.
-      for template in &templates {
-        // Create <depot>/data/<template_name>/ dir.
-        std::fs::create_dir_all(args.data_dir.tenant_db_dir(template))?;
-        // Create <depot>/templates/<template_name>/ dir.
-        std::fs::create_dir_all(args.data_dir.template_migrations_dir(template))?;
-      }
+      args
+        .data_dir
+        .ensure_multi_tenant_directory_structure(&config.tenant_templates)
+        .await?;
 
       // Validate that DB and config match.
       for DbTenant { name, template, .. } in list_tenants(&main_conn).await? {
-        if templates.iter().all(|t| *t != template) {
+        if config
+          .tenant_templates
+          .iter()
+          .find(|t| t.name() == template)
+          .is_none()
+        {
           return Err(InitError::CustomInit(format!(
-            "tenant '{name}' found in DB references template '{template}' not found in config",
+            "tenant '{name}' found in DB references template '{template}' not found in config ({:?})",
+            config.tenant_templates
           )));
         }
 
@@ -891,6 +881,11 @@ mod test_utils {
 
     let config = config.unwrap_or_else(test_config);
     update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
+
+    // Make sure directories exist for all tenants listed in the config.
+    data_dir
+      .ensure_multi_tenant_directory_structure(&config.tenant_templates)
+      .await?;
 
     let logs_conn = crate::connection::init_logs_db(None)?;
     let session_conn = crate::connection::init_session_db(None, /* read_only= */ false)?;

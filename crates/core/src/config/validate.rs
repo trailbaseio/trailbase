@@ -115,6 +115,14 @@ pub async fn validate_config(
         "Two or more APIs have the colliding name: '{api_name}'"
       ));
     }
+
+    if let Some(ref template) = api.tenant_template {
+      if !template_names.contains(template) {
+        return ierr(format!(
+          "Api '{api_name}' references missing template '{template}'"
+        ));
+      }
+    }
   }
 
   // Check OAuth.

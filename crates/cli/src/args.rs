@@ -250,6 +250,14 @@ pub enum TenantCommands {
     /// Optional suffix used for the generated migration file: <templates>/<template>/U<timestamp>__<suffix>.sql.
     suffix: Option<String>,
   },
+  /// Creates a new tenant using the given template
+  NewTenant {
+    /// Name of new tenant.
+    name: String,
+    /// Name of template the tenant uses.
+    #[arg(long)]
+    template: String,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone)]

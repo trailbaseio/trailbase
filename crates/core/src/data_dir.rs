@@ -8,7 +8,7 @@ pub struct DataDir(pub PathBuf);
 
 impl Default for DataDir {
   fn default() -> Self {
-    Self(format!("./{}/", Self::DEFAULT).into())
+    return Self(format!("./{}/", Self::DEFAULT).into());
   }
 }
 
@@ -112,7 +112,26 @@ impl DataDir {
       info!("Initialized or repaired depot: {:?}", self.root());
     }
 
-    Ok(())
+    return Ok(());
+  }
+
+  pub(crate) async fn ensure_multi_tenant_directory_structure(
+    &self,
+    templates: &[crate::config::proto::TenantTemplateConfig],
+  ) -> std::io::Result<()> {
+    // Make sure directories exist for all tenants listed in the config.
+    for template in templates {
+      let Some(ref name) = template.name else {
+        continue;
+      };
+
+      // Create <depot>/data/<template_name>/ dir.
+      fs::create_dir_all(self.tenant_db_dir(name)).await?;
+      // Create <depot>/templates/<template_name>/ dir.
+      fs::create_dir_all(self.template_migrations_dir(name)).await?;
+    }
+
+    return Ok(());
   }
 }
 

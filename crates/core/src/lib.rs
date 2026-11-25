@@ -63,6 +63,7 @@ static DESCRIPTOR_POOL: LazyLock<DescriptorPool> = LazyLock::new(|| {
 pub mod api {
   pub use crate::admin::user::create_user::{CreateUserRequest, create_user_handler};
   pub use crate::app_state::InitArgs;
+  pub use crate::auth::tenant::create_new_tenant;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
   pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all};
   pub use crate::connection::Connection;

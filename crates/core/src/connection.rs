@@ -301,8 +301,15 @@ impl ConnectionManager {
     }
 
     let tenant_dir = self.state.data_dir.data_path().join(tenant_template);
-    // FIXME: We should not create the paths dynamically.
-    let _ = std::fs::create_dir_all(&tenant_dir);
+
+    #[cfg(debug_assertions)]
+    {
+      let result = std::fs::exists(&tenant_dir);
+      debug_assert!(
+        result.unwrap_or_default(),
+        "missing path for template: '{tenant_template}'"
+      );
+    }
 
     let tenant_db_path = if let Some(tenant_id) = tenant_id {
       tenant_dir.join(format!("{tenant_id}.db"))
