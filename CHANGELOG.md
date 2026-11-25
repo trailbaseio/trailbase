@@ -1,7 +1,12 @@
+## v0.36.3
+
+- Last release before upstreaming multi-tenancy changes.
+- Update dependencies. Addresses security advisories.
+
 ## v0.36.2
 
 - Add a simple admin UI to configure your proxy setup and control client-ip extraction.
-- Update dependecies. Addresses Wasmtime security advisories.
+- Update dependencies. Addresses Wasmtime security advisories.
 
 ## v0.36.1
 
