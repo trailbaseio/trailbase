@@ -44,7 +44,7 @@ async fn add_new_tenant_with_one_member(
   state
     .user_conn()
     .execute(
-      formatcp!("INSERT INTO \"{TENANT_MEMBER_TABLE}\" (tenant, user) VALUES ($1, $2);"),
+      formatcp!("INSERT INTO \"{TENANT_MEMBER_TABLE}\" (tenant, \"user\") VALUES ($1, $2);"),
       params!(tenant_id.into_bytes(), user.id.into_bytes()),
     )
     .await
@@ -64,6 +64,7 @@ async fn add_new_tenant_with_one_member(
   return (tenant_id, TestUserAndLogin { user, login });
 }
 
+#[cfg(not(feature = "pg-test"))]
 #[tokio::test]
 async fn multi_tenant_record_api_create() {
   let config = {
