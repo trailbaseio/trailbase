@@ -14,7 +14,7 @@ use std::io::Write;
 use std::str::FromStr;
 use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
-use trailbase::config::proto::Config;
+use trailbase::config::proto::{self, Config};
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, DbUser, InitArgs, Server, ServerOptions, SocketAddr};
 use trailbase_wasm_component_repo::{
@@ -24,7 +24,7 @@ use trailbase_wasm_component_repo::{
 
 use trailbase_cli::{
   AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, MigrationCommands,
-  OpenApiSubCommands, SubCommands, UserSubCommands,
+  OpenApiSubCommands, SubCommands, TenantCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -145,27 +145,7 @@ async fn async_main(
             std::fs::create_dir_all(&dir)?;
           }
 
-          let path = dir.join(api::new_unique_migration_filename(
-            suffix.as_deref().unwrap_or("update"),
-          ));
-          let mut migration_file = std::fs::File::create_new(&path)?;
-          migration_file.write_all(b"-- new database migration\n")?;
-
-          eprintln!("Created empty migration file: {path:?}");
-        }
-        Some(MigrationCommands::NewTemplate { template, suffix }) => {
-          let dir = data_dir.template_migrations_dir(&template);
-          if !dir.exists() {
-            std::fs::create_dir_all(&dir)?;
-          }
-
-          let path = dir.join(api::new_unique_migration_filename(
-            suffix.as_deref().unwrap_or("update"),
-          ));
-          let mut migration_file = std::fs::File::create_new(&path)?;
-          migration_file.write_all(b"-- new database migration\n")?;
-
-          eprintln!("Created empty template migration file: {path:?}");
+          write_new_migration_file(&dir, suffix.as_deref())?;
         }
         Some(MigrationCommands::Apply) => {
           let (new_db, _state) = AppState::init(InitArgs {
@@ -187,6 +167,54 @@ async fn async_main(
             .map(|cmd| cmd.print_help());
         }
       };
+    }
+    SubCommands::Tenant { cmd } => {
+      let (_new_db, state) = AppState::init(InitArgs {
+        data_dir,
+        public_url,
+        ..Default::default()
+      })
+      .await?;
+
+      match cmd {
+        Some(TenantCommands::NewTemplate { name, suffix }) => {
+          let mut config = (**state.get_config()).clone();
+          config.tenant_templates.push(proto::TenantTemplateConfig {
+            name: Some(name.clone()),
+          });
+          state.validate_and_update_config(config, None).await?;
+
+          let dir = state.data_dir().template_migrations_dir(&name);
+          if !dir.exists() {
+            std::fs::create_dir_all(&dir)?;
+          }
+
+          write_new_migration_file(&dir, suffix.as_deref())?;
+        }
+        Some(TenantCommands::NewMigration { template, suffix }) => {
+          if state
+            .get_config()
+            .tenant_templates
+            .iter()
+            .find(|t| t.name.as_deref() == Some(&template))
+            .is_none()
+          {
+            return Err("template not found".into());
+          }
+
+          let dir = state.data_dir().template_migrations_dir(&template);
+          if !dir.exists() {
+            std::fs::create_dir_all(&dir)?;
+          }
+
+          write_new_migration_file(&dir, suffix.as_deref())?;
+        }
+        None => {
+          CommandLineArgs::command()
+            .find_subcommand_mut("tenant")
+            .map(|cmd| cmd.print_help());
+        }
+      }
     }
     SubCommands::Admin { cmd } => {
       let (_new_db, state) = AppState::init(InitArgs {
@@ -861,4 +889,16 @@ fn config_textproto_or_default(data_dir: &DataDir) -> Config {
     .ok()
     .flatten()
     .unwrap_or_else(Config::new_with_custom_defaults);
+}
+
+fn write_new_migration_file(dir: &std::path::Path, suffix: Option<&str>) -> Result<(), BoxError> {
+  let path = dir.join(api::new_unique_migration_filename(
+    suffix.unwrap_or("change"),
+  ));
+  let mut migration_file = std::fs::File::create_new(&path)?;
+  migration_file.write_all(b"-- new database migration\n")?;
+
+  eprintln!("Created empty migration file: {path:?}");
+
+  return Ok(());
 }
