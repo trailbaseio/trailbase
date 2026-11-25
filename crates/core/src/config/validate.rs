@@ -97,6 +97,12 @@ pub async fn validate_config(
 
     validate_db_schema_name(name)?;
 
+    // QUESTION: Should we disallow `<depot>/data/<db>.db` and `<depot>/data/<tenant_name>/` pseudo
+    // conflicts?
+    if db_names.contains(name) {
+      log::warn!("DB and tenant template registered with matching names: '{name}'");
+    }
+
     if !template_names.insert(name.clone()) {
       return ierr(format!("Duplicate template '{name}'"));
     }
