@@ -178,7 +178,7 @@ async fn fetch_users(
     r#"
       SELECT _ROW_.*, json_group_array(uuid_text(m.tenant))
         FROM {fq_table_name} AS _ROW_
-        LEFT JOIN {TENANT_MEMBER_TABLE} AS m ON m.user = _ROW_.id
+        LEFT JOIN {TENANT_MEMBER_TABLE} AS m ON m."user" = _ROW_.id
       WHERE
         {where_clause}
       GROUP BY _ROW_.id

@@ -189,7 +189,7 @@ pub(crate) async fn mint_new_tokens(
         SELECT t.template FROM \"{TENANT_TABLE}\" AS t \
           INNER JOIN \"{TENANT_MEMBER_TABLE}\" AS m ON m.tenant = t.id \
         WHERE \
-          m.user = $1 AND m.tenant = $2; \
+          m.\"user\" = $1 AND m.tenant = $2; \
       "
     );
 
@@ -226,7 +226,7 @@ pub(crate) async fn mint_new_tokens(
     // TODO: Check user connection for tenant membership. Either pass in user connection as well or
     // open main in session (probably the former).
     const SESSION_INSERT_QUERY: &str = formatcp!(
-      "INSERT INTO \"{SESSION_TABLE}\" (user, tenant, refresh_token, expires) VALUES ($1, $2, $3, $4)"
+      "INSERT INTO \"{SESSION_TABLE}\" (\"user\", tenant, refresh_token, expires) VALUES ($1, $2, $3, $4)"
     );
 
     state
@@ -266,7 +266,7 @@ pub(crate) async fn reauth_with_refresh_token(
   // ticking with last login. This may be especially useful for anonymous auth.
   const SESSION_QUERY: &str = formatcp!(
     "\
-      SELECT user, tenant FROM '{SESSION_TABLE}' \
+      SELECT \"user\", tenant FROM '{SESSION_TABLE}' \
       WHERE \
         refresh_token = $1 AND expires > UNIXEPOCH(); \
     "
@@ -303,7 +303,7 @@ pub(crate) async fn reauth_with_refresh_token(
       "\
         SELECT {user_columns}, t.template AS template \
           FROM \"{USER_TABLE}\" \
-          INNER JOIN \"{TENANT_MEMBER_TABLE}\" AS m ON m.user = id \
+          INNER JOIN \"{TENANT_MEMBER_TABLE}\" AS m ON m.\"user\" = id \
           INNER JOIN \"{TENANT_TABLE}\" AS t        ON m.tenant = t.id \
         WHERE \
           id = $1 AND \

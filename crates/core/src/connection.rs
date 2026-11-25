@@ -295,7 +295,9 @@ impl ConnectionManager {
     tenant_id: Option<uuid::Uuid>,
   ) -> Result<ConnectionEntry, ConnectionError> {
     if self.state.pg_uri.is_some() {
-      return Err(ConnectionError::InvalidSetting("PG not supported"));
+      return Err(ConnectionError::InvalidSetting(
+        "multi-tenancy not (yet) supported for Postgres",
+      ));
     }
 
     let tenant_dir = self.state.data_dir.data_path().join(tenant_template);
