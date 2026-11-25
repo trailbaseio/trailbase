@@ -320,6 +320,20 @@ pub enum UserSubCommands {
     #[arg(long, default_value = "true")]
     verified: bool,
   },
+  /// Add user to tenant.
+  AddToTenant {
+    /// User in question, either email, username or UUID.
+    user: String,
+    /// Tenant in question, either name or UUID.
+    tenant: String,
+  },
+  /// Remove user from tenant.
+  RemoveFromTenant {
+    /// User in question, either email, username or UUID.
+    user: String,
+    /// Tenant in question, either name or UUID.
+    tenant: String,
+  },
   /// Invalidate user session, thus requiring them to re-auth when their auth token expires.
   InvalidateSession {
     /// User in question, either email, username or UUID.
