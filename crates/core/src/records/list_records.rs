@@ -161,7 +161,16 @@ pub async fn list_records_handler(
     ),
     (
       Cow::Borrowed(":__user_id"),
-      user.map_or(Value::Null, |u| Into::<Value>::into(u.id.as_bytes())),
+      user
+        .as_ref()
+        .map_or(Value::Null, |u| Value::Blob(u.id.into())),
+    ),
+    (
+      Cow::Borrowed(":__tenant_id"),
+      user
+        .as_ref()
+        .and_then(|u| u.tenant.as_ref().map(|t| Value::Blob(t.id.into())))
+        .unwrap_or(Value::Null),
     ),
   ]);
 
@@ -732,13 +741,14 @@ mod tests {
       (Cow::Borrowed(":__limit"), Value::Integer(100)),
       (
         Cow::Borrowed(":__user_id"),
-        Into::<Value>::into(uuid::Uuid::now_v7().as_bytes()),
+        Value::Blob(uuid::Uuid::now_v7().into()),
       ),
+      (Cow::Borrowed(":__tenant_id"), Value::Null),
     ];
 
-    let result = conn.read_query_rows(query, params).await;
+    let result = conn.read_query_rows(query.clone(), params.clone()).await;
     if let Err(err) = result {
-      panic!("ERROR: {err:?}");
+      panic!("ERROR (\n\t{query},\n\t{params:?}\n): {err:?}");
     }
   }
 
