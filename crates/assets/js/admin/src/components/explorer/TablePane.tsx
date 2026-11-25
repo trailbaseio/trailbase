@@ -132,6 +132,7 @@ function TableHeaderRightHandButtons(props: {
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
   postgres: boolean;
+  multiTenant: boolean;
 }) {
   const selectedSchema = () => props.table;
   const hidden = () => hiddenTable(selectedSchema());
@@ -228,37 +229,40 @@ function TableHeaderRightHandButtons(props: {
       )}
 
       {/* Alter table schema */}
-      {type() === "table" && !hidden() && !props.postgres && (
-        <SafeSheet>
-          {(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={() => {
-                      /* No selection change needed for AlterTable */
-                    }}
-                    schema={props.table as Table}
-                    {...sheet}
-                  />
-                </SheetContent>
+      {type() === "table" &&
+        !hidden() &&
+        !props.postgres &&
+        !props.multiTenant && (
+          <SafeSheet>
+            {(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <CreateAlterTableForm
+                      schemaRefetch={props.schemaRefetch}
+                      allTables={props.allTables}
+                      setSelected={() => {
+                        /* No selection change needed for AlterTable */
+                      }}
+                      schema={props.table as Table}
+                      {...sheet}
+                    />
+                  </SheetContent>
 
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button variant="default" size="sm" {...props}>
-                      <div class="flex items-center gap-2">
-                        Alter <TbOutlineTable />
-                      </div>
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        </SafeSheet>
-      )}
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button variant="default" size="sm" {...props}>
+                        <div class="flex items-center gap-2">
+                          Alter <TbOutlineTable />
+                        </div>
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          </SafeSheet>
+        )}
     </div>
   );
 }
@@ -303,6 +307,7 @@ function TablePaneHeader(props: {
           allTables={allTables()}
           schemaRefetch={props.schemaRefetch}
           postgres={props.postgres}
+          multiTenant={props.table.tenant !== null}
         />
       }
     />
