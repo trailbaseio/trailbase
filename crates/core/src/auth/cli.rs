@@ -9,13 +9,14 @@ use validator::ValidateEmail;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::hash_password;
+use crate::auth::tenant::DbTenant;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   get_user_by_email, get_user_by_id, get_user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username,
 };
-use crate::constants::USER_TABLE;
+use crate::constants::{TENANT_MEMBER_TABLE, TENANT_TABLE, USER_TABLE};
 
 pub enum UserReference {
   Email(String),
@@ -300,6 +301,90 @@ pub async fn import_users(
     })
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  return Ok(());
+}
+
+pub enum TenantReference {
+  Name(String),
+  Id(uuid::Uuid),
+}
+
+impl TenantReference {
+  pub fn parse(tenant: impl AsRef<str>) -> Result<Self, String> {
+    let tenant = tenant.as_ref();
+    if tenant.is_empty() {
+      return Err("empty tenant reference".to_string());
+    }
+
+    if let Ok(id) = Uuid::parse_str(tenant) {
+      return Ok(Self::Id(id));
+    }
+    return Ok(Self::Name(tenant.to_string()));
+  }
+
+  async fn lookup_tenant(&self, user_conn: &Connection) -> Result<DbTenant, AuthError> {
+    return match self {
+      Self::Name(name) => DbTenant::from_row(
+        user_conn
+          .read_query_row(
+            formatcp!(
+              "SELECT {columns} FROM {TENANT_TABLE} WHERE name = $1",
+              columns = DbTenant::COLUMNS
+            ),
+            params!(name.clone()),
+          )
+          .await?
+          .ok_or_else(|| AuthError::NotFound)?,
+      ),
+      Self::Id(uuid) => DbTenant::from_row(
+        user_conn
+          .read_query_row(
+            formatcp!(
+              "SELECT {columns} FROM {TENANT_TABLE} WHERE id = $1",
+              columns = DbTenant::COLUMNS
+            ),
+            params!(uuid.into_bytes()),
+          )
+          .await?
+          .ok_or_else(|| AuthError::NotFound)?,
+      ),
+    };
+  }
+}
+
+pub async fn add_user_to_tenant(
+  user_conn: &trailbase_sqlite::Connection,
+  user: UserReference,
+  tenant: TenantReference,
+) -> Result<(), AuthError> {
+  let db_user = user.lookup_user(user_conn).await?;
+  let db_tenant = tenant.lookup_tenant(user_conn).await?;
+
+  user_conn
+    .write_query_row(
+      formatcp!("INSERT INTO {TENANT_MEMBER_TABLE} (tenant, \"user\") VALUES ($1, $2)"),
+      params!(db_tenant.id, db_user.id),
+    )
+    .await?;
+
+  return Ok(());
+}
+
+pub async fn remove_user_from_tenant(
+  user_conn: &trailbase_sqlite::Connection,
+  user: UserReference,
+  tenant: TenantReference,
+) -> Result<(), AuthError> {
+  let db_user = user.lookup_user(user_conn).await?;
+  let db_tenant = tenant.lookup_tenant(user_conn).await?;
+
+  user_conn
+    .write_query_row(
+      formatcp!("DELETE FROM {TENANT_MEMBER_TABLE} WHERE tenant = $1 AND \"user\" = $2"),
+      params!(db_tenant.id, db_user.id),
+    )
+    .await?;
 
   return Ok(());
 }

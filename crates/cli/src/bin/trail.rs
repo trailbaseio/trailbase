@@ -12,7 +12,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
 use std::str::FromStr;
-use trailbase::api::cli::UserReference;
+use trailbase::api::cli::{TenantReference, UserReference};
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::config::proto::{self, Config};
 use trailbase::constants::USER_TABLE;
@@ -315,6 +315,18 @@ async fn async_main(
             .await?;
 
           eprintln!("Set verified={verified} for '{id}'");
+        }
+        Some(UserSubCommands::AddToTenant { user, tenant }) => {
+          let user = UserReference::parse(user)?;
+          let tenant = TenantReference::parse(tenant)?;
+
+          trailbase::api::cli::add_user_to_tenant(state.user_conn(), user, tenant).await?;
+        }
+        Some(UserSubCommands::RemoveFromTenant { user, tenant }) => {
+          let user = UserReference::parse(user)?;
+          let tenant = TenantReference::parse(tenant)?;
+
+          trailbase::api::cli::remove_user_from_tenant(state.user_conn(), user, tenant).await?;
         }
         Some(UserSubCommands::InvalidateSession { user }) => {
           api::cli::invalidate_sessions(
