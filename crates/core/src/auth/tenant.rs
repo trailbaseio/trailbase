@@ -1,10 +1,14 @@
 use const_format::formatcp;
+use std::path::PathBuf;
+use std::sync::Arc;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_sqlite::{Connection, Row};
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthError;
 use crate::constants::TENANT_TABLE;
+use crate::migrations::{get_base_and_custom_migrations, new_migration_runner};
+use crate::{AppState, DataDir};
 
 #[derive(Debug, Default, Clone)]
 pub struct DbTenant {
@@ -45,7 +49,65 @@ impl DbTenant {
   }
 }
 
-pub async fn list_tenants(conn: &Connection) -> Result<Vec<DbTenant>, AuthError> {
+pub async fn apply_migrations_for_all_multi_tenant_dbs(
+  data_dir: &DataDir,
+  json_schema_registry: Arc<JsonSchemaRegistry>,
+  config: &crate::config::proto::Config,
+  conn: &Connection,
+) -> Result<(), crate::InitError> {
+  use crate::InitError;
+
+  for DbTenant { name, template, .. } in list_tenants(conn).await? {
+    if config
+      .tenant_templates
+      .iter()
+      .find(|t| t.name() == template)
+      .is_none()
+    {
+      return Err(InitError::CustomInit(format!(
+        "tenant '{name}' found in DB references template '{template}' not found in config ({:?})",
+        config.tenant_templates
+      )));
+    }
+
+    // Apply migrations.
+    let tenant_db_dir = data_dir.tenant_db_dir(&template);
+    let migrations_dir = data_dir.template_migrations_dir(&template);
+    let migrations = get_base_and_custom_migrations(Some(&migrations_dir))
+      .map_err(|err| InitError::CustomInit(format!("{err}")))?;
+
+    let mut conns = find_tenant_dbs(&tenant_db_dir)
+      .into_iter()
+      .map(|path| {
+        return trailbase_extension::connect_rusqlite(
+          Some(&path),
+          Some(json_schema_registry.clone()),
+        )
+        .map_err(|err| InitError::CustomInit(format!("{err}")));
+      })
+      .collect::<Result<Vec<_>, _>>()?;
+
+    // First run a dry-run migration for each tenant (including golden).
+    for conn in &mut conns {
+      let runner = new_migration_runner(&migrations).set_dry_run(true);
+      runner
+        .run(conn)
+        .map_err(|err| InitError::CustomInit(format!("Dry-run failed: {err}")))?;
+    }
+
+    // If nothing failed above, migrate all the DBs.
+    for conn in &mut conns {
+      let runner = new_migration_runner(&migrations).set_dry_run(false);
+      runner
+        .run(conn)
+        .map_err(|err| InitError::CustomInit(format!("Wet-run failed: {err}")))?;
+    }
+  }
+
+  return Ok(());
+}
+
+async fn list_tenants(conn: &Connection) -> Result<Vec<DbTenant>, AuthError> {
   let rows = conn
     .read_query_rows(formatcp!("SELECT * FROM \"{TENANT_TABLE}\""), ())
     .await?;
@@ -98,4 +160,32 @@ pub async fn create_new_tenant(
   };
 
   return Ok(Uuid::from_bytes(tenant.id));
+}
+
+fn find_tenant_dbs(path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {
+  let Ok(dir) = std::fs::read_dir(path.as_ref()) else {
+    return vec![];
+  };
+
+  return dir
+    .into_iter()
+    .flat_map(|entry| {
+      let Ok(entry) = entry else {
+        return None;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        return None;
+      };
+
+      if metadata.is_file() || metadata.is_symlink() {
+        let path = entry.path();
+        if path.extension()? == "db" {
+          return Some(path);
+        }
+      }
+
+      return None;
+    })
+    .collect();
 }
