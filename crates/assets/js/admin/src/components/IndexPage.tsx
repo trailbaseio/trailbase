@@ -89,7 +89,7 @@ const elements = [
   {
     icon: TbOutlineUsers,
     content: "Manage your application's user accounts.",
-    href: `${BASE}/auth`,
+    href: `${BASE}/accounts`,
   },
   {
     icon: TbOutlinePackage,
@@ -192,7 +192,7 @@ export function IndexPage() {
             <FactCard
               title="Users"
               content={`${dashboardFetch.data!.numUsers}`}
-              href={`${BASE}/auth`}
+              href={`${BASE}/accounts`}
             />
             <FactCard
               title="Tables & Views"

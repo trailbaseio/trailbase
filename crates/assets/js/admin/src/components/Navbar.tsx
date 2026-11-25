@@ -48,7 +48,7 @@ const options = [
   [`${BASE}/table/`, TbOutlineDatabase, "Table & View Browser"],
   [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
   [`${BASE}/erd`, TbOutlineChartDots3, "Entity Relationship Diagram"],
-  [`${BASE}/auth`, TbOutlineUsers, "User Accounts"],
+  [`${BASE}/accounts`, TbOutlineUsers, "User Accounts"],
   [`${BASE}/wasm/`, TbOutlinePackage, "WASM Components"],
   [`${BASE}/logs`, TbOutlineTimeline, "Logs & Metrics"],
   [`${BASE}/openapi`, TbOutlineApi, "OpenApi"],
