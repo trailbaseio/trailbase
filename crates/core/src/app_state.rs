@@ -11,7 +11,6 @@ use trailbase_schema::db::metadata::ConnectionMetadata;
 use crate::aes::KeyType;
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
-use crate::auth::tenant::{DbTenant, list_tenants};
 use crate::config::{
   ConfigError, Textproto, load_or_init_config_textproto, proto, validate_config,
   write_config_and_vault_textproto,
@@ -22,7 +21,6 @@ use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::init_error::InitError;
 use crate::metadata::load_check_and_update_metadata_textproto;
-use crate::migrations::{get_base_and_custom_migrations, new_migration_runner};
 use crate::rand::random_alphanumeric;
 use crate::records::file_token::get_or_init_aes256_file_key;
 use crate::records::subscribe::manager::SubscriptionManager;
@@ -175,51 +173,13 @@ impl AppState {
         .ensure_multi_tenant_directory_structure(&config.tenant_templates)
         .await?;
 
-      // Validate that DB and config match.
-      for DbTenant { name, template, .. } in list_tenants(&main_conn).await? {
-        if config
-          .tenant_templates
-          .iter()
-          .find(|t| t.name() == template)
-          .is_none()
-        {
-          return Err(InitError::CustomInit(format!(
-            "tenant '{name}' found in DB references template '{template}' not found in config ({:?})",
-            config.tenant_templates
-          )));
-        }
-
-        // Apply migrations.
-        let data_dir = args.data_dir.tenant_db_dir(&template);
-        let migrations_dir = args.data_dir.template_migrations_dir(&template);
-        let migrations = get_base_and_custom_migrations(Some(&migrations_dir))
-          .map_err(|err| InitError::CustomInit(format!("{err}")))?;
-
-        // First Dry-run.
-        let dbs = find_tenant_dbs(&data_dir);
-        for db in &dbs {
-          let mut conn =
-            trailbase_extension::connect_rusqlite(Some(db), Some(json_schema_registry.load_full()))
-              .map_err(|err| InitError::CustomInit(format!("{err}")))?;
-
-          let runner = new_migration_runner(&migrations).set_dry_run(true);
-          runner
-            .run(&mut conn)
-            .map_err(|err| InitError::CustomInit(format!("{err}")))?;
-        }
-
-        // Then full run.
-        for db in &dbs {
-          let mut conn =
-            trailbase_extension::connect_rusqlite(Some(db), Some(json_schema_registry.load_full()))
-              .map_err(|err| InitError::CustomInit(format!("{err}")))?;
-
-          let runner = new_migration_runner(&migrations).set_dry_run(false);
-          runner
-            .run(&mut conn)
-            .map_err(|err| InitError::CustomInit(format!("{err}")))?;
-        }
-      }
+      crate::auth::tenant::apply_migrations_for_all_multi_tenant_dbs(
+        &args.data_dir,
+        json_schema_registry.load_full(),
+        &config,
+        &main_conn,
+      )
+      .await?;
     }
 
     let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
@@ -969,34 +929,6 @@ pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
     return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
   }
   return Ok(());
-}
-
-pub fn find_tenant_dbs(path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {
-  let Ok(dir) = std::fs::read_dir(path.as_ref()) else {
-    return vec![];
-  };
-
-  return dir
-    .into_iter()
-    .flat_map(|entry| {
-      let Ok(entry) = entry else {
-        return None;
-      };
-
-      let Ok(metadata) = entry.metadata() else {
-        return None;
-      };
-
-      if metadata.is_file() || metadata.is_symlink() {
-        let path = entry.path();
-        if path.extension()? == "db" {
-          return Some(path);
-        }
-      }
-
-      return None;
-    })
-    .collect();
 }
 
 #[cfg(test)]
