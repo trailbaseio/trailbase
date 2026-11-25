@@ -7,7 +7,9 @@ import {
   Switch,
   Suspense,
   onMount,
+  createEffect,
 } from "solid-js";
+import { useNavigate, useParams } from "@solidjs/router";
 import { useSearchParams } from "@solidjs/router";
 import {
   TbOutlineBroadcast,
@@ -939,14 +941,41 @@ function UserAccountsTab(props: { setHeader: (header: JSX.Element) => void }) {
 export function AccountsPage() {
   const [header, setHeader] = createSignal<JSX.Element | null>(null);
 
+  const navigate = useNavigate();
+  const params = useParams<{ kind?: string }>();
+
+  const targetTab = () => {
+    switch (params.kind) {
+      case "tenants":
+        return "tenants";
+      default:
+        return "users";
+    }
+  };
+
   return (
     <div class="size-full scrollbar-thin md:overflow-y-auto">
       {header()}
 
-      <Tabs defaultValue="users">
+      <Tabs value={targetTab()}>
         <TabsList class="mx-4 my-2 grid grid-cols-2">
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+          <TabsTrigger
+            value="users"
+            onClick={() => {
+              navigate(`/accounts/users`);
+            }}
+          >
+            Users
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="tenants"
+            onClick={() => {
+              navigate(`/accounts/tenants`);
+            }}
+          >
+            Tenants
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">

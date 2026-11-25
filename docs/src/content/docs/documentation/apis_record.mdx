@@ -170,9 +170,16 @@ In this context, a template refers to a set of schema migrations that need to
 be applied to existing and newly created per-tenant database instances.
 
 In addition the static API and schema config above, actual tenants can be
-created using the admin UI or the CLI (`trail tenant new-tenant <name>`).
+created using the admin UI or the CLI:
+
+```sh
+trail tenant new-tenant <tenant_name>`
+trail user add-to-tenant admin@localhost <tenant_name>`
+```
+
 Users who become a member of a tenant, can sign-in with a specific tenant
-association using either the clients or the web UI (`/_/auth/login?tenant=`).
+association using either the clients or the web UI
+(`/_/auth/login?tenant=(<teanant_id>|<tenant_name>)`).
 
 ### `VIEW`-based APIs
 

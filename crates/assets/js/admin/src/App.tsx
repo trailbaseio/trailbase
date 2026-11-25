@@ -107,7 +107,7 @@ const App: Component = () => {
         <Router base={"/_/admin"} root={WrapWithNav}>
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />
-          <Route path="/auth" component={AccountsPage} />
+          <Route path="/accounts/:kind?" component={AccountsPage} />
           <Route path="/wasm/:name?" component={WasmPage} />
           <Route path="/editor" component={LazyEditorPage} />
           <Route path="/erd" component={LazyErdPage} />
