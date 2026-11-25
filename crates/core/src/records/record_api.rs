@@ -959,7 +959,10 @@ fn build_read_delete_schema_query(
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
-        (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_, \
+        (SELECT \
+          CAST(:__user_id AS uuid) AS id, \
+          CAST(:__tenant_id AS uuid) AS tenant \
+        ) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
     )
