@@ -701,11 +701,42 @@ function TenantsTab(props: { setHeader: (header: JSX.Element) => void }) {
 
         <Match when={true}>
           <div class="w-full space-y-2.5">
+            <Show when={Number(tenants.data?.total_row_count ?? -1) === 0}>
+              <Callout class="flex flex-col gap-2 text-sm">
+                <p>
+                  No tenants found. New tenants can only be added using this UI,
+                  if at least one <span class="font-mono">template</span>, i.e.
+                  a group of migrations that should be applied to tenant DBs, is
+                  registered.
+                </p>
+
+                <p>
+                  You can use the CLI to create new templates:
+                  <br />
+                  <span class="ml-4 font-mono">
+                    trail [--depot=] tenant new-template {"<"}name{">"}
+                  </span>
+                </p>
+
+                <p>
+                  There's also currently no way to add new migrations using the
+                  UI. You can use:
+                  <br />
+                  <span class="ml-4 font-mono">
+                    trail [--depot=] tenant new-migration {"<"}template{">"}
+                  </span>
+                </p>
+              </Callout>
+            </Show>
+
             <Table
               table={tenantsTable}
               loading={tenants.isLoading}
-              onRowClick={(_idx: number, row: TenantJson) => {
-                return null;
+              onRowClick={(_idx: number, _row: TenantJson) => {
+                // NOTE: We currently don't support updating/editing tenants. We should
+                // maybe keep it that way, since changing the name may break users
+                // (signing-in via tenant name) and there's isn't much to edit anyway
+                // making delete+create-new similarly convenient.
               }}
             />
           </div>
