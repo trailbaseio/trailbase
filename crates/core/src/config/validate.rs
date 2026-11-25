@@ -10,23 +10,47 @@ use crate::config::{ConfigError, proto};
 use crate::connection::ConnectionManager;
 use crate::records::validate_record_api_config;
 
+pub(crate) fn validate_name_length(name: &str) -> Result<(), ConfigError> {
+  return match name.len() {
+    0 => Err(ConfigError::Invalid("Name cannot be empty".to_string())),
+    n if n > 128 => Err(ConfigError::Invalid("Name too long (n <128)".to_string())),
+    _ => Ok(()),
+  };
+}
+
 fn validate_application_name(name: &str) -> Result<(), ConfigError> {
+  validate_name_length(name)?;
+
   if !name
     .chars()
     .all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '.' || x == '-' || x == ' ')
   {
     return Err(ConfigError::Invalid(format!(
-      "Application name: {name}. Must only contain alphanumeric characters, spaces or '_', '-', '.'."
+      "Application name '{name}' must only contain alphanumeric characters, spaces or (_, -, .)."
     )));
   }
 
-  if name.is_empty() {
-    return Err(ConfigError::Invalid(
-      "Application name must not be empty".to_string(),
-    ));
-  }
+  return Ok(());
+}
 
-  Ok(())
+pub(crate) fn validate_db_schema_name(name: &str) -> Result<(), ConfigError> {
+  validate_name_length(name)?;
+
+  return match name {
+    "main" | "public" | "logs" | "session" | "sqlite_master" | "" => Err(ConfigError::Invalid(
+      format!("Invalid schema name: '{name}'"),
+    )),
+    name
+      if !name
+        .chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '-') =>
+    {
+      Err(ConfigError::Invalid(format!(
+        "Invalid schema name: '{name}'. May only contain alphanumeric characters and (_, -)"
+      )))
+    }
+    _ => Ok(()),
+  };
 }
 
 pub async fn validate_config(
@@ -58,23 +82,15 @@ pub async fn validate_config(
       return ierr("Missing database name");
     };
 
+    validate_db_schema_name(&name)?;
+
     if !db_names.insert(name.clone()) {
       return ierr(format!("Database '{name}' linked more than once"));
     }
+  }
 
-    match name.as_str() {
-      "main" | "public" | "logs" | "session" | "sqlite_master" | "" => {
-        return ierr(format!("Invalid database name: {name}"));
-      }
-      name
-        if !name
-          .chars()
-          .all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '-') =>
-      {
-        return ierr(format!("Invalid database name: {name}"));
-      }
-      _ => {}
-    }
+  for tenant in &config.tenant_templates {
+    validate_db_schema_name(&tenant.name())?;
   }
 
   // Check RecordApis.

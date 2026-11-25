@@ -4,13 +4,12 @@ use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
 use trailbase_schema::db::sqlite::{ColumnOption, QualifiedName};
 use trailbase_sqlite::ConnectionType;
 
+use crate::config::validate::{validate_db_schema_name, validate_name_length};
 use crate::config::{ConfigError, proto};
 use crate::connection::{ConnectionEntry, ConnectionManager};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
-  if name.is_empty() {
-    return Err(invalid("Invalid api name: cannot be empty"));
-  }
+  validate_name_length(name)?;
 
   if !name.chars().all(|x| x.is_ascii_alphanumeric() || x == '_') {
     return Err(invalid(format!(
@@ -50,6 +49,10 @@ pub(crate) async fn validate_record_api_config(
     };
     QualifiedName::parse(table_name)?
   };
+
+  if let Some(ref db_schema) = table_name.database_schema {
+    validate_db_schema_name(&db_schema)?;
+  }
 
   let dangling_database_references: Vec<_> = api_config
     .attached_databases
@@ -91,6 +94,8 @@ pub(crate) async fn validate_record_api_config(
         ),
       ));
     }
+
+    validate_db_schema_name(&tenant_template)?;
 
     if !api_config.acl_world.is_empty() {
       return Err(invalid_prefixed(
