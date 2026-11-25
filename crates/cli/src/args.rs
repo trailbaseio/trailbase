@@ -74,10 +74,15 @@ pub enum SubCommands {
     #[command(subcommand)]
     cmd: Option<OpenApiSubCommands>,
   },
-  /// Creates new empty migration file.
+  /// Manages database migrations.
   Migration {
     #[command(subcommand)]
     cmd: Option<MigrationCommands>,
+  },
+  /// Creates new empty migration file.
+  Tenant {
+    #[command(subcommand)]
+    cmd: Option<TenantCommands>,
   },
   /// Manage admin users (list, demote, promote).
   Admin {
@@ -219,18 +224,32 @@ pub enum OpenApiSubCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum MigrationCommands {
+  /// Creates a new versioned migration file under <depot>/migrations/<db>.
   New {
     /// Optional database name (Default: "main").
     db: Option<String>,
     /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
     suffix: Option<String>,
   },
+  /// Applies all migrations w/o starting a server.
+  Apply,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TenantCommands {
+  /// Creates a new template, i.e. a group of DB schemas/migrations tenants refer to.
   NewTemplate {
-    template: String,
-    /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
+    /// Name of new template.
+    name: String,
+    /// Optional suffix used for the generated migration file: <templates>/<name>/U<timestamp>__<suffix>.sql.
     suffix: Option<String>,
   },
-  Apply,
+  /// Creates a new versioned migration for the given `template`.
+  NewMigration {
+    template: String,
+    /// Optional suffix used for the generated migration file: <templates>/<template>/U<timestamp>__<suffix>.sql.
+    suffix: Option<String>,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone)]

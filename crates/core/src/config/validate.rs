@@ -89,8 +89,17 @@ pub async fn validate_config(
     }
   }
 
+  let mut template_names = HashSet::<String>::new();
   for tenant in &config.tenant_templates {
-    validate_db_schema_name(&tenant.name())?;
+    let Some(ref name) = tenant.name else {
+      return ierr("Missing template name");
+    };
+
+    validate_db_schema_name(name)?;
+
+    if !template_names.insert(name.clone()) {
+      return ierr(format!("Duplicate template '{name}'"));
+    }
   }
 
   // Check RecordApis.
