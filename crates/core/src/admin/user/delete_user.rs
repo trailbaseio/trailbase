@@ -43,6 +43,7 @@ pub async fn delete_user_handler(
   delete_row(
     &state,
     &USER_TABLE_FQ,
+    /* tenant= */ None,
     "id",
     SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&request.id))),
   )

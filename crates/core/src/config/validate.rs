@@ -82,7 +82,7 @@ pub async fn validate_config(
       return ierr("Missing database name");
     };
 
-    validate_db_schema_name(&name)?;
+    validate_db_schema_name(name)?;
 
     if !db_names.insert(name.clone()) {
       return ierr(format!("Database '{name}' linked more than once"));
@@ -122,12 +122,12 @@ pub async fn validate_config(
       ));
     }
 
-    if let Some(ref template) = api.tenant_template {
-      if !template_names.contains(template) {
-        return ierr(format!(
-          "Api '{api_name}' references missing template '{template}'"
-        ));
-      }
+    if let Some(ref template) = api.tenant_template
+      && !template_names.contains(template)
+    {
+      return ierr(format!(
+        "Api '{api_name}' references missing template '{template}'"
+      ));
     }
   }
 

@@ -1,13 +1,12 @@
 import {
-  createMemo,
-  createSignal,
   JSX,
   Match,
   Show,
-  Switch,
   Suspense,
+  Switch,
+  createMemo,
+  createSignal,
   onMount,
-  createEffect,
 } from "solid-js";
 import { useNavigate, useParams } from "@solidjs/router";
 import { useSearchParams } from "@solidjs/router";

@@ -9,7 +9,7 @@ use trailbase_schema::db::sqlite::{QualifiedName, Table, TableIndex, View};
 use trailbase_sqlite::params;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
+use crate::admin::{AdminError as Error, Tenant};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::constants::SQLITE_SCHEMA_TABLE;
@@ -21,13 +21,6 @@ use crate::constants::TENANT_TABLE;
 pub struct TableTrigger {
   pub name: QualifiedName,
   pub table_name: String,
-}
-
-#[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
-pub struct Tenant {
-  template: String,
-  id: Option<uuid::Uuid>,
-  name: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
@@ -197,52 +190,49 @@ async fn list_tables_handler_sqlite_impl(
       }
 
       let path = entry.path();
-      match (
+      if let (Some(stem), Some("db")) = (
         path.file_stem().and_then(|ext| ext.to_str()),
         path.extension().and_then(|ext| ext.to_str()),
       ) {
-        (Some(stem), Some("db")) => {
-          let Ok(tenant_id) = uuid::Uuid::parse_str(stem) else {
-            warn!("Failed to parse tenant id");
-            continue;
-          };
+        let Ok(tenant_id) = uuid::Uuid::parse_str(stem) else {
+          warn!("Failed to parse tenant id");
+          continue;
+        };
 
-          let tenant_name: Option<String> = state
-            .user_conn()
-            .read_query_row_get(
-              formatcp!("SELECT name FROM \"{TENANT_TABLE}\" WHERE id = $1"),
-              params!(tenant_id.into_bytes()),
-              0,
-            )
-            .await?;
+        let tenant_name: Option<String> = state
+          .user_conn()
+          .read_query_row_get(
+            formatcp!("SELECT name FROM \"{TENANT_TABLE}\" WHERE id = $1"),
+            params!(tenant_id.into_bytes()),
+            0,
+          )
+          .await?;
 
-          if tenant_name.is_none() {
-            warn!("Found tenant DB w/o associated tenant entry. Stale DB?");
-          }
-
-          let ConnectionEntry {
-            connection: conn, ..
-          } = state
-            .connection_manager()
-            .build_for_tenant(&tenant_template, Some(tenant_id))
-            .await?;
-
-          let databases = conn.list_databases().await?;
-          for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
-            debug!("scanning {tenant_template}, {schema:?}");
-
-            add_schema_to_response(
-              schema,
-              &mut response,
-              Some(Tenant {
-                template: tenant_template.clone(),
-                id: Some(tenant_id),
-                name: tenant_name.clone(),
-              }),
-            )?;
-          }
+        if tenant_name.is_none() {
+          warn!("Found tenant DB w/o associated tenant entry. Stale DB?");
         }
-        _ => {}
+
+        let ConnectionEntry {
+          connection: conn, ..
+        } = state
+          .connection_manager()
+          .build_for_tenant(&tenant_template, Some(tenant_id))
+          .await?;
+
+        let databases = conn.list_databases().await?;
+        for schema in fetch_schemas(&conn, &databases, /* skip_main= */ true).await? {
+          debug!("scanning {tenant_template}, {schema:?}");
+
+          add_schema_to_response(
+            schema,
+            &mut response,
+            Some(Tenant {
+              template: tenant_template.clone(),
+              id: Some(tenant_id),
+              name: tenant_name.clone(),
+            }),
+          )?;
+        }
       }
     }
   }

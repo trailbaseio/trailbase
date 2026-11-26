@@ -8,7 +8,7 @@ use trailbase_schema::json_schema::FileUpload;
 use ts_rs::TS;
 use utoipa::IntoParams;
 
-use crate::admin::AdminError as Error;
+use crate::admin::{AdminError as Error, Tenant, TenantQueryParams};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::files::read_file_into_response;
@@ -17,10 +17,16 @@ use crate::records::queries::run_get_files_query;
 #[derive(Debug, Deserialize, TS, IntoParams)]
 #[ts(export)]
 pub(crate) struct ReadFilesQuery {
+  /// Optional tenant metadata.
+  #[serde(flatten)]
+  pub tenant: TenantQueryParams,
+  /// Primary key column.
   pub pk_column: String,
+  /// The primary key value.
   pub pk_value: String,
 
   pub file_column_name: String,
+  // NOTE: This is not an SqlValue because this is a query parameter (as opposed to a request).
   pub file_name: Option<String>,
 }
 
@@ -49,7 +55,7 @@ pub async fn read_files_handler(
     metadata,
   } = state
     .connection_manager()
-    .get_entry_for_qn(&table_name)
+    .get_entry_for_admin(Tenant::from_query(&query.tenant)?.as_ref(), &table_name)
     .await?;
 
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
