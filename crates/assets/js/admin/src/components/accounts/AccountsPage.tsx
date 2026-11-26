@@ -1,5 +1,6 @@
 import {
   JSX,
+  For,
   Match,
   Show,
   Suspense,
@@ -158,10 +159,18 @@ function buildUserColumns(): ColumnDef<StockFeatures, UserJson>[] {
     },
     {
       id: "tenants",
-      header: "tenants",
+      header: "tenant associations",
       size: 100,
       cell: (ctx) => (
-        <div>{`${ctx.row.original.tenant_memberships.join(",")}`}</div>
+        <ul class="flex flex-wrap gap-x-1">
+          <For each={ctx.row.original.tenant_memberships}>
+            {(item) => (
+              <li class="after:mr-1 after:content-[','] last:after:content-['']">
+                {item.name}
+              </li>
+            )}
+          </For>
+        </ul>
       ),
     },
     {
