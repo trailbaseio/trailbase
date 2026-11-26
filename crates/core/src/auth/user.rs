@@ -102,14 +102,6 @@ impl DbUser {
   }
 }
 
-/// Representing an authenticated and *valid* user, as opposed to [`DbUser`], which is merely an
-/// entry for any user including users that haven't been validated.
-#[derive(Clone, Debug)]
-pub struct DbUserAndTenant {
-  pub user: DbUser,
-  pub tenant: Option<Tenant>,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Tenant {
