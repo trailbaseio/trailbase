@@ -147,57 +147,40 @@ impl AppState {
     })
     .await?;
 
-    // Read config or write default one. Ensures config is validated.
-    let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
-
     // Load the `<depot>/metadata.textproto`.
     load_check_and_update_metadata_textproto(&args.data_dir).await?;
 
-    let main_conn = connection_manager.main_entry().connection.clone();
+    // Read config or write default one. Ensures config is validated.
+    let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
 
-    // TODO: Initialize tenant DBs:
-    //  * Read tenants from DB.
-    //  * Read templates from config and validate.
-    //  * Apply per-template migrations to all tenants
-    //    * Dry run.
-    //    * If all succeed, commit.
-    //
-    // Eventually, we want a more flexible lifecycle, i.e.:
-    //  * Create a new DB eagerly when a new tenant is added in the admin UI.
-    //    * We don't ever want lazy creation of tenant DBs on request path unless there's a good reason for such extra complexity.
-    //  * P4: Apply new migrations on SIGHUP (we don't do this right for any DBs.
-    {
-      // Make sure directories exist for all tenants listed in the config.
-      args
-        .data_dir
-        .ensure_multi_tenant_directory_structure(&config.tenant_templates)
-        .await?;
-
-      crate::auth::tenant::apply_migrations_for_all_multi_tenant_dbs(
-        &args.data_dir,
-        json_schema_registry.load_full(),
-        &config,
-        &main_conn,
-      )
-      .await?;
-    }
-
-    let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
-
-    // Init geoip if present.
-    let geoip_db_path = args
-      .geoip_db_path
-      .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
-    if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
-      debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
-    }
-
-    let object_store = Arc::new(build_objectstore(
+    // Initialize/migrate tenant DBs. We currently only do this on startup and not on
+    // hot-reload/SIGHUP.
+    crate::auth::tenant::apply_migrations_for_all_multi_tenant_dbs(
       &args.data_dir,
-      config.server.s3_storage_config.as_ref(),
-    )?);
+      json_schema_registry.load_full(),
+      &config,
+      &connection_manager.main_entry().connection,
+    )
+    .await?;
 
     let app_state = {
+      let main_conn = connection_manager.main_entry().connection.clone();
+      let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
+      let file_token_key = get_or_init_aes256_file_key(&args.data_dir)?;
+
+      // Init geoip if present.
+      let geoip_db_path = args
+        .geoip_db_path
+        .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
+      if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
+        debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
+      }
+
+      let object_store = Arc::new(build_objectstore(
+        &args.data_dir,
+        config.server.s3_storage_config.as_ref(),
+      )?);
+
       // Build reactive stuff.
       let config = Reactive::new(config);
 
@@ -224,10 +207,6 @@ impl AppState {
         config.derive(|c| c.record_apis.clone()),
       )
       .await;
-
-      let file_token_key = get_or_init_aes256_file_key(&args.data_dir)?;
-
-      let main_conn = connection_manager.main_entry().connection.clone();
 
       AppState {
         state: Arc::new(InternalState {

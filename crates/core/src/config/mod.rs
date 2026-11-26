@@ -57,6 +57,12 @@ pub async fn load_or_init_config_textproto(
     merge_vault_and_env(config, vault)?
   };
 
+  // Make sure directories exist for all tenants listed in the config. This is also necessary to
+  // create `golden.db` for validation below. Maybe we should create goldens only in :memory:?.
+  data_dir
+    .ensure_multi_tenant_directory_structure(&merged_config.tenant_templates)
+    .await?;
+
   validate_config(connection_manager, &merged_config).await?;
 
   return Ok(merged_config);

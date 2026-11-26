@@ -279,12 +279,11 @@ pub async fn subscribe_ws(
   mut user: Option<User>,
   request: Request,
 ) -> Result<Response, RecordError> {
+  use crate::records::subscribe::state::AutoCleanupEventStream;
   use axum::extract::FromRequestParts;
   use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
   use futures_util::SinkExt;
   use std::sync::Arc;
-
-  use crate::records::subscribe::state::AutoCleanupEventStream;
 
   let (mut parts, _body) = request.into_parts();
   let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {

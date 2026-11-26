@@ -147,7 +147,10 @@ impl SubscriptionManager {
 
   pub async fn get_per_connection_state(&self, api: &RecordApi) -> PerConnectionState {
     // QUESTION: Can we support subscriptions for tenant DBs?
-    let conn_id: usize = api.single_tenant_conn().id();
+    debug_assert!(!api.is_multi_tenant());
+
+    let conn = api.single_tenant_conn();
+    let conn_id: usize = conn.id();
 
     let mut lock = self.connections.upgradable_read();
     if let Some(state) = lock.get(&conn_id) {
@@ -162,7 +165,7 @@ impl SubscriptionManager {
         Entry::Vacant(v) => {
           let state = PerConnectionState::new(
             &self.file_token_key,
-            api.single_tenant_conn().clone(),
+            conn.clone(),
             api.connection_metadata().clone(),
             filter_record_apis(conn_id, &record_apis),
           );
