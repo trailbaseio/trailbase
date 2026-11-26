@@ -953,7 +953,8 @@ export interface RecordApiConfig {
 
 export interface TenantTemplateConfig {
   /**
-   * Name of the golden template used for a set of tenants.
+   * Name of a template, i.e. set of migrations, used to create and maintain
+   * per-tenant DBs.
    *
    * Schema migrations are expected under <depot>/templates/<name>.
    */

@@ -201,7 +201,7 @@ async fn list_tables_handler_sqlite_impl(
         path.file_stem().and_then(|ext| ext.to_str()),
         path.extension().and_then(|ext| ext.to_str()),
       ) {
-        (Some(stem), Some("db")) if stem != "golden" => {
+        (Some(stem), Some("db")) => {
           let Ok(tenant_id) = uuid::Uuid::parse_str(stem) else {
             warn!("Failed to parse tenant id");
             continue;

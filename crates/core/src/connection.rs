@@ -300,22 +300,20 @@ impl ConnectionManager {
       ));
     }
 
-    let tenant_dir = self.state.data_dir.data_path().join(tenant_template);
-
-    #[cfg(debug_assertions)]
-    {
-      let result = std::fs::exists(&tenant_dir);
-      debug_assert!(
-        result.unwrap_or_default(),
-        "missing path for template: '{tenant_template}'"
-      );
-    }
-
     let tenant_db_path = if let Some(tenant_id) = tenant_id {
+      let tenant_dir = self.state.data_dir.data_path().join(tenant_template);
+
+      debug_assert!(
+        std::fs::exists(&tenant_dir).unwrap_or_default(),
+        "missing template directory: '{tenant_template}'"
+      );
+
       tenant_dir.join(format!("{tenant_id}.db"))
     } else {
-      // TODO: Somewhat hacky: we create a pristine DB just to derive metadata.
-      tenant_dir.join("golden.db")
+      // In cases where we don't have a tenant-id, we use an in-memory DB. This is useful for
+      // deriving schema metadata for a template outside the context of request-handling where a
+      // tenant-id may be present.
+      format!("file:{tenant_template}.golden?mode=memory&cache=shared").into()
     };
 
     let migrations_path = self.state.data_dir.template_migrations_dir(tenant_template);
@@ -324,10 +322,6 @@ impl ConnectionManager {
       Some(&self.state.data_dir.main_db_path()),
       InitDbOptions {
         migrations: None,
-        // migrations: Some(Migrations {
-        //   main: true,
-        //   path: &migration_path,
-        // }),
         json_registry: &self.state.json_schema_registry,
         runtimes: &self.state.sqlite_function_runtimes,
         attach: vec![AttachedDatabase {
@@ -665,7 +659,9 @@ async fn init_db_sqlite<'a>(
     log::debug!("Attaching '{schema_name}': {file:?}, {migrations:?}");
 
     // Before attaching secondary DBs, we must ensure their schemas are up-to-date.
-    if let Some(migrations) = migrations {
+    // We keep the connection alive until after we attach it below. This is only relevant for shared
+    // in-memory DBs.
+    let _keep_alive = if let Some(migrations) = migrations {
       let mut secondary =
         build_rusqlite_connection(Some(file), opts.json_registry.clone(), opts.runtimes)?;
 
@@ -673,7 +669,11 @@ async fn init_db_sqlite<'a>(
       //
       // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
       apply_base_migrations(&mut secondary, Some(migrations), schema_name)?;
-    }
+
+      Some(secondary)
+    } else {
+      None
+    };
 
     conn.attach(&file.to_string_lossy(), schema_name).await?;
   }

@@ -153,6 +153,11 @@ impl AppState {
     // Read config or write default one. Ensures config is validated.
     let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
 
+    args
+      .data_dir
+      .ensure_multi_tenant_directory_structure(&config.tenant_templates)
+      .await?;
+
     // Initialize/migrate tenant DBs. We currently only do this on startup and not on
     // hot-reload/SIGHUP.
     crate::auth::tenant::apply_migrations_for_all_multi_tenant_dbs(
