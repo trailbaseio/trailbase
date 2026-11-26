@@ -13,4 +13,4 @@ env_logger = { workspace = true }
 log = { workspace = true }
 prost-build = "^0.14.6"
 prost-reflect-build = "0.16.1"
-regex = "1.13.2"
+regex = { workspace = true }

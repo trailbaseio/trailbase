@@ -125,10 +125,11 @@ impl DataDir {
         continue;
       };
 
-      // Create <depot>/data/<template_name>/ dir.
-      fs::create_dir_all(self.tenant_db_dir(name)).await?;
       // Create <depot>/templates/<template_name>/ dir.
       fs::create_dir_all(self.template_migrations_dir(name)).await?;
+
+      // Create <depot>/data/<template_name>/ dir.
+      fs::create_dir_all(self.tenant_db_dir(name)).await?;
     }
 
     return Ok(());

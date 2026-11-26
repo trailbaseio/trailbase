@@ -577,7 +577,16 @@ impl RecordApi {
     return self.state.user_conn.connection_type();
   }
 
-  pub fn single_tenant_conn(&self) -> &trailbase_sqlite::Connection {
+  pub fn is_multi_tenant(&self) -> bool {
+    return match &self.state.conn {
+      ApiConnection::SingleTenant(_) => false,
+      ApiConnection::MultiTenant { .. } => true,
+    };
+  }
+
+  /// Sync, single-tenant only connection accessor. Needed only for subscriptions and hot-reload
+  /// config change observers. Panics if used on multi-tenant APIs.
+  pub(super) fn single_tenant_conn(&self) -> &trailbase_sqlite::Connection {
     return match &self.state.conn {
       ApiConnection::SingleTenant(conn) => conn,
       ApiConnection::MultiTenant { .. } => {
@@ -587,23 +596,28 @@ impl RecordApi {
   }
 
   /// Returns the DB connection serving the API call.
+  ///
+  /// NOTE: This has to be async for the multi-tenant lazy connect.
   pub async fn conn(
     &self,
     user: Option<&User>,
   ) -> Result<trailbase_sqlite::Connection, RecordError> {
-    return match &self.state.conn {
-      ApiConnection::SingleTenant(conn) => Ok(conn.clone()),
+    return match self.state.conn {
+      ApiConnection::SingleTenant(ref conn) => Ok(conn.clone()),
       ApiConnection::MultiTenant {
-        mgr,
-        tenant_template,
+        ref mgr,
+        ref tenant_template,
       } => {
-        let Some(tenant) = user.as_ref().and_then(|u| u.tenant.as_ref()) else {
-          return Err(RecordError::Forbidden);
+        let tenant_id = match user.as_ref().and_then(|u| u.tenant.as_ref()) {
+          Some(tenant) if tenant.template == *tenant_template => tenant.id,
+          _ => {
+            return Err(RecordError::Forbidden);
+          }
         };
 
         Ok(
           mgr
-            .build_for_tenant(tenant_template, Some(tenant.id))
+            .build_for_tenant(tenant_template, Some(tenant_id))
             .await
             .map_err(|err| {
               RecordError::Internal(format!("Failed to open connection: {err}").into())

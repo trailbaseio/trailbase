@@ -87,7 +87,7 @@ prost = { version = "^0.14.6", default-features = false }
 prost-reflect = { version = "^0.16.5", default-features = false, features = ["derive", "text-format"] }
 quick_cache = "0.7.0"
 rand = { workspace = true }
-regex = "1.13.2"
+regex = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
 rust-embed = { workspace = true }

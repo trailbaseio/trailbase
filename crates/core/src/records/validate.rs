@@ -97,6 +97,13 @@ pub(crate) async fn validate_record_api_config(
 
     validate_db_schema_name(&tenant_template)?;
 
+    if api_config.enable_subscriptions() {
+      return Err(invalid_prefixed(
+        &prefix,
+        "Multi-tenant APIs do not support subscriptions."
+      ));
+    }
+
     if !api_config.acl_world.is_empty() {
       return Err(invalid_prefixed(
         &prefix,

@@ -28,7 +28,10 @@ def exec_process(command: str, args: list, cwd: Path | None = None):
 
     print(f"exec [CWD: {root}]: '{command} {' '.join(args)}'")
 
-    os.execve(resolved_cmd, [resolved_cmd, *args], os.environ)
+    env = os.environ.copy()
+    env["RUST_BACKTRACE"] = "1"
+
+    os.execve(resolved_cmd, [resolved_cmd, *args], env)
 
 
 def cargo_build(ws: bool):
