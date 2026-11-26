@@ -12,9 +12,15 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::connection::ConnectionEntry;
-use crate::constants::{TENANT_MEMBER_TABLE, USER_TABLE_FQ};
+use crate::constants::{TENANT_MEMBER_TABLE, TENANT_TABLE, USER_TABLE_FQ};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::util::row_id_column;
+
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
+pub struct TenantMembership {
+  id: Uuid,
+  name: String,
+}
 
 #[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct UserJson {
@@ -31,11 +37,11 @@ pub struct UserJson {
   pub created: i64,
   pub updated: i64,
 
-  pub tenant_memberships: Vec<String>,
+  pub tenant_memberships: Vec<TenantMembership>,
 }
 
 impl UserJson {
-  fn from(user: DbUser, tenant_memberships: Vec<String>) -> Self {
+  fn from(user: DbUser, tenant_memberships: Vec<(Uuid, String)>) -> Self {
     UserJson {
       id: Uuid::from_bytes(user.id).to_string(),
       email: user.email.map(String::from),
@@ -46,7 +52,10 @@ impl UserJson {
       provider_user_id: user.provider_user_id.map(String::from),
       created: user.created,
       updated: user.updated,
-      tenant_memberships,
+      tenant_memberships: tenant_memberships
+        .into_iter()
+        .map(|(id, name)| TenantMembership { id, name })
+        .collect(),
     }
   }
 }
@@ -144,7 +153,7 @@ async fn fetch_users(
   offset: Option<usize>,
   order: &Order,
   limit: usize,
-) -> Result<Vec<(DbUser, Vec<String>)>, Error> {
+) -> Result<Vec<(DbUser, Vec<(Uuid, String)>)>, Error> {
   let WhereClause {
     mut params,
     clause: where_clause,
@@ -176,9 +185,10 @@ async fn fetch_users(
 
   let sql_query = format!(
     r#"
-      SELECT _ROW_.*, json_group_array(uuid_text(m.tenant))
+      SELECT _ROW_.*, json_group_array(json_array(uuid_text(m.tenant), t.name))
         FROM {fq_table_name} AS _ROW_
-        LEFT JOIN {TENANT_MEMBER_TABLE} AS m ON m."user" = _ROW_.id
+        LEFT JOIN "{TENANT_MEMBER_TABLE}" AS m ON m."user" = _ROW_.id
+        LEFT JOIN "{TENANT_TABLE}" AS t ON t.id = m.tenant
       WHERE
         {where_clause}
       GROUP BY _ROW_.id
@@ -190,7 +200,7 @@ async fn fetch_users(
     fq_table_name = USER_TABLE_FQ.escaped_string(),
   );
 
-  let users: Vec<(DbUser, Vec<String>)> = conn
+  let users: Vec<(DbUser, Vec<(Uuid, String)>)> = conn
     .read_query_rows(sql_query.clone(), params)
     .await
     .map_err(|err| {
@@ -203,7 +213,7 @@ async fn fetch_users(
       return Ok((
         DbUser::from_row(row)?,
         memberships
-          .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok())
+          .and_then(|json| serde_json::from_str::<Vec<(Uuid, String)>>(&json).ok())
           .unwrap_or_default(),
       ));
     })

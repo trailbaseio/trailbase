@@ -92,6 +92,7 @@ export * from './TableIndex';
 export * from './TableTrigger';
 export * from './Tenant';
 export * from './TenantJson';
+export * from './TenantMembership';
 export * from './TestEmailRequest';
 export * from './TransactionResponse';
 export * from './TransactionResult';
