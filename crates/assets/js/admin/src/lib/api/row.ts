@@ -21,8 +21,13 @@ function removeUndefined(row: Record): { [key: string]: SqlValue } {
   ) as { [key: string]: SqlValue };
 }
 
-export async function insertRow(table: Table, row: Record) {
+export async function insertRow(
+  table: Table,
+  tenant: Tenant | null,
+  row: Record,
+) {
   const request: InsertRowRequest = {
+    tenant,
     row: removeUndefined(row),
   };
 
@@ -35,12 +40,17 @@ export async function insertRow(table: Table, row: Record) {
   return await response.text();
 }
 
-export async function updateRow(table: Table, row: Record) {
-  return await updateRowInternal(table.name, table.columns, row);
+export async function updateRow(
+  table: Table,
+  tenant: Tenant | null,
+  row: Record,
+) {
+  return await updateRowInternal(table.name, tenant, table.columns, row);
 }
 
 export async function updateRowInternal(
   qualifiedTableName: QualifiedName,
+  tenant: Tenant | null,
   columns: Column[],
   row: Record,
 ) {
@@ -61,6 +71,7 @@ export async function updateRowInternal(
   delete filteredRow[pkColName];
 
   const request: UpdateRowRequest = {
+    tenant,
     primary_key_column: pkColName,
     primary_key_value: pkValue,
     row: filteredRow,
@@ -79,7 +90,7 @@ export async function deleteRows(
   request: DeleteRowsRequest,
 ) {
   const response = await adminFetch(
-    `/table/${escapeQualifiedName(tableName)}/rows`,
+    `/table/${escapeQualifiedName(tableName)}`,
     {
       method: "DELETE",
       body: JSON.stringify(request),

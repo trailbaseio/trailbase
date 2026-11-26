@@ -26,6 +26,7 @@ import {
   QualifiedName,
   ReadFilesQuery,
   SqlValue,
+  Tenant,
 } from "trailbase-bindings";
 
 export type FileUpload = {
@@ -47,6 +48,7 @@ type FileUploadInput = {
 
 async function uploadSingleFile(opts: {
   tableName: QualifiedName;
+  tenant: Tenant | null;
   columns: Column[];
   columnName: string;
   pk: {
@@ -65,11 +67,12 @@ async function uploadSingleFile(opts: {
     },
   };
 
-  await updateRowInternal(opts.tableName, opts.columns, record);
+  await updateRowInternal(opts.tableName, opts.tenant, opts.columns, record);
 }
 
 async function uploadMultipleFiles(opts: {
   tableName: QualifiedName;
+  tenant: Tenant | null;
   columns: Column[];
   columnName: string;
   pk: {
@@ -99,11 +102,12 @@ async function uploadMultipleFiles(opts: {
     },
   };
 
-  await updateRowInternal(opts.tableName, opts.columns, record);
+  await updateRowInternal(opts.tableName, opts.tenant, opts.columns, record);
 }
 
 async function deleteSingleFile(opts: {
   tableName: QualifiedName;
+  tenant: Tenant | null;
   columns: Column[];
   columnName: string;
   pk: {
@@ -126,19 +130,20 @@ async function deleteSingleFile(opts: {
       },
     };
 
-    await updateRowInternal(opts.tableName, opts.columns, record);
+    await updateRowInternal(opts.tableName, opts.tenant, opts.columns, record);
   } else {
     const record = {
       [opts.pk.columnName]: opts.pk.value,
       [opts.columnName]: "Null" as SqlValue,
     };
 
-    await updateRowInternal(opts.tableName, opts.columns, record);
+    await updateRowInternal(opts.tableName, opts.tenant, opts.columns, record);
   }
 }
 
 function FileUploadButton(props: {
   tableName: QualifiedName;
+  tenant: Tenant | null;
   columns: Column[];
   columnName: string;
   pk: {
@@ -159,6 +164,7 @@ function FileUploadButton(props: {
     if (props.multiple) {
       await uploadMultipleFiles({
         tableName: props.tableName,
+        tenant: props.tenant,
         columns: props.columns,
         columnName: props.columnName,
         pk: props.pk,
@@ -172,6 +178,7 @@ function FileUploadButton(props: {
 
       await uploadSingleFile({
         tableName: props.tableName,
+        tenant: props.tenant,
         columns: props.columns,
         columnName: props.columnName,
         pk: props.pk,
@@ -227,6 +234,7 @@ function SingleUploadedFile(props: {
   tableName: QualifiedName;
   columns: Column[];
   columnName: string;
+  tenant: Tenant | null;
   pk: {
     columnName: string;
     value: SqlValue;
@@ -240,6 +248,8 @@ function SingleUploadedFile(props: {
     fileDownloadUrl({
       tableName: props.tableName,
       query: {
+        tenant_template: props.tenant?.template ?? null,
+        tenant_id: props.tenant?.id ?? null,
         pk_column: props.pk.columnName,
         pk_value: sqlValueToString(props.pk.value),
         file_column_name: props.columnName,
@@ -334,6 +344,7 @@ export function UploadedFile(props: {
   tableName: QualifiedName;
   columns: Column[];
   columnName: string;
+  tenant: Tenant | null;
   pk: {
     columnName: string;
     value: SqlValue;
@@ -345,6 +356,7 @@ export function UploadedFile(props: {
       <Match when={props.file === null}>
         <FileUploadButton
           tableName={props.tableName}
+          tenant={props.tenant}
           columns={props.columns}
           columnName={props.columnName}
           pk={props.pk}
@@ -371,6 +383,7 @@ export function UploadedFiles(props: {
   tableName: QualifiedName;
   columns: Column[];
   columnName: string;
+  tenant: Tenant | null;
   pk: {
     columnName: string;
     value: SqlValue;
@@ -396,6 +409,7 @@ export function UploadedFiles(props: {
 
       <FileUploadButton
         tableName={props.tableName}
+        tenant={props.tenant}
         columns={props.columns}
         columnName={props.columnName}
         pk={props.pk}

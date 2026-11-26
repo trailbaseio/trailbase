@@ -27,6 +27,7 @@ use axum::body::Body;
 use axum::extract::{Extension, Request, State};
 use axum::response::Response;
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use trailbase_assets::AssetService;
 use utoipa_axum::router::OpenApiRouter;
@@ -35,6 +36,43 @@ use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{AuthError, User};
 use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
+
+#[derive(Debug, Default, Deserialize, ts_rs::TS, utoipa::ToSchema)]
+pub struct TenantQueryParams {
+  tenant_template: Option<String>,
+  tenant_id: Option<String>,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize, ts_rs::TS, utoipa::ToSchema)]
+pub struct Tenant {
+  pub template: String,
+  pub id: Option<uuid::Uuid>,
+  pub name: Option<String>,
+}
+
+impl Tenant {
+  pub fn from_query(
+    TenantQueryParams {
+      tenant_template,
+      tenant_id,
+    }: &TenantQueryParams,
+  ) -> Result<Option<Self>, AdminError> {
+    return match (tenant_template, tenant_id) {
+      (Some(template), Some(id)) => Ok(Some(Self {
+        template: template.to_string(),
+        id: Some(uuid::Uuid::parse_str(id).map_err(|err| AdminError::BadRequest(err.into()))?),
+        name: None,
+      })),
+      (Some(template), None) => Ok(Some(Self {
+        template: template.to_string(),
+        id: None,
+        name: None,
+      })),
+      (None, Some(_)) => Err(AdminError::BadRequest("missing `?tenant_template=`".into())),
+      (None, None) => Ok(None),
+    };
+  }
+}
 
 pub fn unprotected_admin_router() -> OpenApiRouter<AppState> {
   // Using the utoipa integration, we can use the on-handler metadata as the
@@ -47,7 +85,6 @@ pub fn unprotected_admin_router() -> OpenApiRouter<AppState> {
     .routes(routes!(rows::list_rows::list_rows_handler))
     .routes(routes!(rows::read_files::read_files_handler))
     .routes(routes!(rows::delete_rows::delete_rows_handler))
-    .routes(routes!(rows::delete_rows::delete_row_handler))
     .routes(routes!(rows::update_row::update_row_handler))
     .routes(routes!(rows::insert_row::insert_row_handler))
     // Index actions.

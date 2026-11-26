@@ -64,6 +64,7 @@ async fn add_new_tenant_with_one_member(
   return (tenant_id, TestUserAndLogin { user, login });
 }
 
+#[allow(irrefutable_let_patterns)]
 #[cfg(not(feature = "pg-test"))]
 #[tokio::test]
 async fn multi_tenant_record_api_create() {

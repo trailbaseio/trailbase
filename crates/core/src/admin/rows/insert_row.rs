@@ -5,7 +5,7 @@ use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
+use crate::admin::{AdminError as Error, Tenant};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::InsertParams;
@@ -15,6 +15,8 @@ use crate::util::row_id_column;
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct InsertRowRequest {
+  /// Optional tenant metadata.
+  pub tenant: Option<Tenant>,
   /// Row data, which is expected to be a map from column name to value.
   pub row: indexmap::IndexMap<String, SqlValue>,
 }
@@ -44,7 +46,7 @@ pub async fn insert_row_handler(
     metadata,
   } = state
     .connection_manager()
-    .get_entry_for_qn(&table_name)
+    .get_entry_for_admin(request.tenant.as_ref(), &table_name)
     .await?;
 
   let Some(table_metadata) = metadata.get_table(&table_name) else {
@@ -115,6 +117,7 @@ mod tests {
     };
 
     let request = InsertRowRequest {
+      tenant: None,
       row: indexmap::IndexMap::from([
         ("id".to_string(), SqlValue::Integer(3)),
         (

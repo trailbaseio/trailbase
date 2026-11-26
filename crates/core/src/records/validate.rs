@@ -51,7 +51,7 @@ pub(crate) async fn validate_record_api_config(
   };
 
   if let Some(ref db_schema) = table_name.database_schema {
-    validate_db_schema_name(&db_schema)?;
+    validate_db_schema_name(db_schema)?;
   }
 
   let dangling_database_references: Vec<_> = api_config
@@ -95,7 +95,7 @@ pub(crate) async fn validate_record_api_config(
       ));
     }
 
-    validate_db_schema_name(&tenant_template)?;
+    validate_db_schema_name(tenant_template)?;
 
     if api_config.enable_subscriptions() {
       return Err(invalid_prefixed(
@@ -115,7 +115,12 @@ pub(crate) async fn validate_record_api_config(
       .build_for_tenant(tenant_template, None)
       .await
   } else {
-    connection_manager.get_entry_for_qn(&table_name).await
+    connection_manager
+      .get_entry(
+        /* attach_main= */ true,
+        Some(api_config.attached_databases.iter().cloned().collect()),
+      )
+      .await
   }
   .map_err(|err| {
     return invalid_prefixed(&prefix, err);

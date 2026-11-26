@@ -4,9 +4,10 @@ import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 
 import type {
   Column,
-  Table,
   ColumnAffinityType,
   ColumnDataType,
+  Schema,
+  Table,
 } from "trailbase-bindings";
 
 import { Button } from "@/components/ui/button";
@@ -142,7 +143,7 @@ export function InsertUpdateRowForm(props: {
   close: () => void;
   markDirty: () => void;
   rowsRefetch: () => void;
-  schema: Table;
+  schema: Schema<Table>;
   row?: Record;
 }) {
   const isUpdate = () => props.row !== undefined;
@@ -150,7 +151,7 @@ export function InsertUpdateRowForm(props: {
   const form = createForm(() => {
     const defaultValues: Record = props.row
       ? { ...props.row }
-      : buildDefaultRecord(props.schema);
+      : buildDefaultRecord(props.schema.schema);
 
     return {
       defaultValues,
@@ -158,15 +159,23 @@ export function InsertUpdateRowForm(props: {
         console.debug(`Submitting ${isUpdate() ? "update" : "insert"}:`, value);
 
         // Transform (currently only geometry WKT->WKB)
-        const transformed = transform(props.schema, { ...value });
+        const transformed = transform(props.schema.schema, { ...value });
 
         try {
           if (isUpdate()) {
             // NOTE: updateRow mutates the value - it deletes the pk, thus shallow copy.
             // NOTE: value['key'] === undefined won't be serialized to JSON and thus sent.
-            await updateRow(props.schema, transformed);
+            await updateRow(
+              props.schema.schema,
+              props.schema.tenant,
+              transformed,
+            );
           } else {
-            await insertRow(props.schema, transformed);
+            await insertRow(
+              props.schema.schema,
+              props.schema.tenant,
+              transformed,
+            );
           }
 
           props.rowsRefetch();
@@ -202,7 +211,7 @@ export function InsertUpdateRowForm(props: {
         }}
       >
         <div class="flex flex-col items-start gap-4 py-4">
-          <For each={props.schema.columns}>
+          <For each={props.schema.schema.columns}>
             {(column: Column) => {
               return (
                 <form.Field

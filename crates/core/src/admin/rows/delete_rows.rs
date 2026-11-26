@@ -10,46 +10,68 @@ use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
+use crate::admin::{AdminError as Error, Tenant};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::queries::run_delete_query;
 
-#[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Default, TS, utoipa::ToSchema)]
 #[ts(export)]
-pub struct DeleteRowRequest {
+pub struct DeleteRowsRequest {
+  /// Optional tenant metadata.
+  tenant: Option<Tenant>,
+  /// Name of the primary key column we use to identify which rows to delete.
   primary_key_column: String,
-  /// The primary key value.
-  value: SqlValue,
+
+  /// A list of primary keys (of any type since we're in row instead of RecordApi land)
+  /// of rows that shall be deleted.
+  primary_key_values: Vec<SqlValue>,
 }
 
 #[utoipa::path(
   delete,
   path = "/table/{table_name}",
   tag = "admin",
-  request_body = DeleteRowRequest,
+  request_body = DeleteRowsRequest,
   responses(
     (status = 200, description = "Success"),
   )
 )]
-pub async fn delete_row_handler(
+pub async fn delete_rows_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,
-  Json(request): Json<DeleteRowRequest>,
+  Json(request): Json<DeleteRowsRequest>,
 ) -> Result<Response, Error> {
-  delete_row(
-    &state,
-    &QualifiedName::parse(&table_name)?,
-    &request.primary_key_column,
-    request.value,
-  )
-  .await?;
-  return Ok((StatusCode::OK, "deleted").into_response());
+  if state.demo_mode() && table_name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
+
+  let table_name = QualifiedName::parse(&table_name)?;
+  let DeleteRowsRequest {
+    tenant,
+    primary_key_column,
+    primary_key_values,
+  } = request;
+
+  for value in primary_key_values {
+    // NOTE: Abort on first error.
+    delete_row(
+      &state,
+      &table_name,
+      tenant.as_ref(),
+      &primary_key_column,
+      value,
+    )
+    .await?;
+  }
+
+  return Ok((StatusCode::OK, "deleted all").into_response());
 }
 
 pub(crate) async fn delete_row(
   state: &AppState,
   table_name: &QualifiedName,
+  tenant: Option<&Tenant>,
   pk_col: &str,
   pk_value: SqlValue,
 ) -> Result<(), Error> {
@@ -58,7 +80,7 @@ pub(crate) async fn delete_row(
     metadata,
   } = state
     .connection_manager()
-    .get_entry_for_qn(table_name)
+    .get_entry_for_admin(tenant, table_name)
     .await?;
 
   let Some(table_metadata) = metadata.get_table(table_name) else {
@@ -87,49 +109,6 @@ pub(crate) async fn delete_row(
   .await?;
 
   return Ok(());
-}
-
-#[derive(Debug, Serialize, Deserialize, Default, TS, utoipa::ToSchema)]
-#[ts(export)]
-pub struct DeleteRowsRequest {
-  /// Name of the primary key column we use to identify which rows to delete.
-  primary_key_column: String,
-
-  /// A list of primary keys (of any type since we're in row instead of RecordApi land)
-  /// of rows that shall be deleted.
-  values: Vec<SqlValue>,
-}
-
-#[utoipa::path(
-  delete,
-  path = "/table/{table_name}/rows",
-  tag = "admin",
-  request_body = DeleteRowsRequest,
-  responses(
-    (status = 200, description = "Success"),
-  )
-)]
-pub async fn delete_rows_handler(
-  State(state): State<AppState>,
-  Path(table_name): Path<String>,
-  Json(request): Json<DeleteRowsRequest>,
-) -> Result<Response, Error> {
-  if state.demo_mode() && table_name.starts_with("_") {
-    return Err(Error::Precondition("Disallowed in demo".into()));
-  }
-
-  let table_name = QualifiedName::parse(&table_name)?;
-  let DeleteRowsRequest {
-    primary_key_column,
-    values,
-  } = request;
-
-  for value in values {
-    // NOTE: Abort on first error.
-    delete_row(&state, &table_name, &primary_key_column, value).await?;
-  }
-
-  return Ok((StatusCode::OK, "deleted all").into_response());
 }
 
 #[cfg(test)]
@@ -215,6 +194,7 @@ mod tests {
         State(state.clone()),
         Path(table_name.clone()),
         Json(InsertRowRequest {
+          tenant: None,
           row: indexmap::IndexMap::from([("col0".to_string(), SqlValue::Text(value.to_string()))]),
         }),
       )
@@ -267,6 +247,7 @@ mod tests {
       State(state.clone()),
       Path(table_name.clone()),
       Json(UpdateRowRequest {
+        tenant: None,
         primary_key_column: pk_col.clone(),
         primary_key_value: SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&id0))),
         row: indexmap::IndexMap::from([(
@@ -293,12 +274,13 @@ mod tests {
     );
 
     let delete = |id: uuid::Uuid| {
-      delete_row_handler(
+      delete_rows_handler(
         State(state.clone()),
         Path(table_name.clone()),
-        Json(DeleteRowRequest {
+        Json(DeleteRowsRequest {
+          tenant: None,
           primary_key_column: pk_col.clone(),
-          value: SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&id))),
+          primary_key_values: vec![SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&id)))],
         }),
       )
     };

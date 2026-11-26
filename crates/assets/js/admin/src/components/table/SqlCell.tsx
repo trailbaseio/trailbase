@@ -20,15 +20,12 @@ import type {
   ColumnDataType,
   QualifiedName,
   SqlValue,
+  Tenant,
 } from "trailbase-bindings";
 
 import type { BlobEncoding } from "@/components/table/BlobEncoding";
-import {
-  type FileUpload,
-  type FileUploads,
-  UploadedFile,
-  UploadedFiles,
-} from "@/components/table/Files";
+import { UploadedFile, UploadedFiles } from "@/components/table/Files";
+import type { FileUpload, FileUploads } from "@/components/table/Files";
 import { Uuid } from "@/components/table/Uuid";
 
 export type CellType =
@@ -71,6 +68,7 @@ export function renderCell(
   blobEncoding: BlobEncoding,
   fileColumnSupport?: {
     tableName: QualifiedName;
+    tenant: Tenant | null;
     columns: Column[];
     pkIndex: number;
     rowsRefetch: () => void;
@@ -82,7 +80,8 @@ export function renderCell(
 
   // Special handling for file columns.
   if (fileColumnSupport !== undefined) {
-    const { tableName, columns, pkIndex, rowsRefetch } = fileColumnSupport;
+    const { tableName, tenant, columns, pkIndex, rowsRefetch } =
+      fileColumnSupport;
 
     const pkCol = columns[pkIndex].name;
     const pkVal = context.row.original[pkIndex];
@@ -102,6 +101,7 @@ export function renderCell(
         <UploadedFile
           file={contents()}
           tableName={tableName}
+          tenant={tenant}
           columnName={column.name}
           columns={columns}
           pk={{ columnName: pkCol, value: pkVal }}
@@ -122,6 +122,7 @@ export function renderCell(
         <UploadedFiles
           files={contents()}
           tableName={tableName}
+          tenant={tenant}
           columnName={column.name}
           columns={columns}
           pk={{ columnName: pkCol, value: pkVal }}

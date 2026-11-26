@@ -5,7 +5,7 @@ use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
+use crate::admin::{AdminError as Error, Tenant};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::{ParamOptions, UpdateParams};
@@ -14,7 +14,11 @@ use crate::records::queries::run_update_query;
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct UpdateRowRequest {
+  /// Optional tenant metadata.
+  pub tenant: Option<Tenant>,
+  /// Primary key column.
   pub primary_key_column: String,
+  /// The primary key value.
   pub primary_key_value: SqlValue,
 
   /// Row data, which is expected to be a map from column name to value.
@@ -48,7 +52,7 @@ pub async fn update_row_handler(
     metadata,
   } = state
     .connection_manager()
-    .get_entry_for_qn(&table_name)
+    .get_entry_for_admin(request.tenant.as_ref(), &table_name)
     .await?;
 
   let Some(table_metadata) = metadata.get_table(&table_name) else {
@@ -104,6 +108,7 @@ mod tests {
   use trailbase_schema::json_schema::{FileUpload, FileUploadData};
 
   use super::*;
+  use crate::admin::TenantQueryParams;
   use crate::admin::rows::list_rows::{ListRowsResponse, list_rows_handler};
   use crate::admin::rows::read_files::{ReadFilesQuery, read_files_handler};
   use crate::app_state::test_state;
@@ -149,6 +154,7 @@ mod tests {
       State(state.clone()),
       Path(TABLE_NAME.to_string()),
       Json(UpdateRowRequest {
+        tenant: None,
         primary_key_column: "id".to_string(),
         primary_key_value: SqlValue::Integer(1),
         row: indexmap::IndexMap::from([
@@ -203,6 +209,10 @@ mod tests {
       State(state.clone()),
       Path(TABLE_NAME.to_string()),
       Query(ReadFilesQuery {
+        tenant: TenantQueryParams {
+          tenant_template: None,
+          tenant_id: None,
+        },
         pk_column: "id".to_string(),
         pk_value: "1".to_string(),
         file_column_name: "file".to_string(),

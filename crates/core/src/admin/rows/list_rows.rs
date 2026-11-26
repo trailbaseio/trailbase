@@ -1,23 +1,17 @@
 use axum::extract::{Json, Path, RawQuery, State};
 use log::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::db::sqlite::{Column, ColumnDataType, QualifiedName};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
 use crate::admin::util::rows_to_sql_value_rows;
+use crate::admin::{AdminError as Error, Tenant, TenantQueryParams};
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-
-#[derive(Debug, Default, Deserialize)]
-pub struct ListRowsQuery {
-  tenant_template: Option<String>,
-  tenant_id: Option<String>,
-}
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
@@ -53,14 +47,11 @@ pub async fn list_rows_handler(
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListRowsResponse>, Error> {
   let qs = serde_qs::Config::new().max_depth(1).use_form_encoding(true);
-  let ListRowsQuery {
-    tenant_template,
-    tenant_id,
-  } = raw_url_query
+  let tenant_query = raw_url_query
     .as_ref()
     .map(|q| {
       return qs
-        .deserialize_bytes::<ListRowsQuery>(q.as_bytes())
+        .deserialize_bytes::<TenantQueryParams>(q.as_bytes())
         .map_err(|err| Error::BadRequest(err.into()));
     })
     .transpose()?
@@ -84,27 +75,10 @@ pub async fn list_rows_handler(
   let ConnectionEntry {
     connection: conn,
     metadata: _metadata,
-  } = if let Some(tenant_template) = tenant_template {
-    if let Some(tenant_id) = tenant_id {
-      let tenant_id =
-        uuid::Uuid::parse_str(&tenant_id).map_err(|err| Error::BadRequest(err.into()))?;
-
-      state
-        .connection_manager()
-        .build_for_tenant(&tenant_template, Some(tenant_id))
-        .await?
-    } else {
-      state
-        .connection_manager()
-        .build_for_tenant(&tenant_template, None)
-        .await?
-    }
-  } else {
-    state
-      .connection_manager()
-      .get_entry_for_qn(&qualified_name)
-      .await?
-  };
+  } = state
+    .connection_manager()
+    .get_entry_for_admin(Tenant::from_query(&tenant_query)?.as_ref(), &qualified_name)
+    .await?;
 
   // Build fresh metadata rather than relying on cache.
   let metadata = crate::schema_metadata::build_metadata_and_maybe_file_deletions(

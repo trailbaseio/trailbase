@@ -315,7 +315,7 @@ function TablePaneHeader(props: {
 }
 
 function buildColumnDefs(
-  selectedSchema: Table | View,
+  selectedSchema: Schema<Table> | Schema<View>,
   columns: Column[] | undefined,
   pkColumnIndex: number,
   blobEncoding: BlobEncoding,
@@ -323,8 +323,8 @@ function buildColumnDefs(
 ): ColumnDef<StockFeatures, ArrayRecord, SqlValue>[] {
   if (columns === undefined) {
     // Fallback to schema (rather than response) column definitions.
-    if (tableType(selectedSchema) === "table") {
-      return (selectedSchema as Table).columns.map((c) => ({
+    if (tableType(selectedSchema.schema) === "table") {
+      return (selectedSchema as Schema<Table>).schema.columns.map((c) => ({
         id: c.name,
         header: c.name,
       }));
@@ -353,7 +353,8 @@ function buildColumnDefs(
             col,
             blobEncoding,
             /* fileColumnSupport= */ {
-              tableName: selectedSchema.name,
+              tableName: selectedSchema.schema.name,
+              tenant: selectedSchema.tenant,
               columns,
               pkIndex: pkColumnIndex,
               rowsRefetch,
@@ -365,7 +366,7 @@ function buildColumnDefs(
 }
 
 function RecordTable(props: {
-  selectedSchema: Table | View;
+  selectedSchema: Schema<Table> | Schema<View>;
   records: ListRowsResponse | undefined;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
@@ -380,7 +381,7 @@ function RecordTable(props: {
     new Map<string, SqlValue>(),
   );
 
-  const selectedSchema = () => props.selectedSchema;
+  const selectedSchema = () => props.selectedSchema.schema;
   const mutable = () =>
     tableType(selectedSchema()) === "table" && !hiddenTable(selectedSchema());
   const rowsRefetch = () => props.rowsRefetch();
@@ -395,7 +396,7 @@ function RecordTable(props: {
 
   const columnDefs = createMemo(() =>
     buildColumnDefs(
-      selectedSchema(),
+      props.selectedSchema,
       columns(),
       pkColumnIndex(),
       blobEncoding(),
@@ -460,7 +461,7 @@ function RecordTable(props: {
             <>
               <SheetContent class={sheetMaxWidth}>
                 <InsertUpdateRowForm
-                  schema={selectedSchema() as Table}
+                  schema={props.selectedSchema as Schema<Table>}
                   rowsRefetch={rowsRefetch}
                   row={editRow()}
                   {...sheet}
@@ -507,7 +508,7 @@ function RecordTable(props: {
                   <>
                     <SheetContent class={sheetMaxWidth}>
                       <InsertUpdateRowForm
-                        schema={selectedSchema() as Table}
+                        schema={props.selectedSchema as Schema<Table>}
                         rowsRefetch={rowsRefetch}
                         {...sheet}
                       />
@@ -538,9 +539,10 @@ function RecordTable(props: {
                 (async () => {
                   try {
                     await deleteRows(selectedSchema().name, {
+                      tenant: props.selectedSchema.tenant,
                       primary_key_column:
                         columns()?.[pkColumnIndex()].name ?? "??",
-                      values: ids,
+                      primary_key_values: ids,
                     });
 
                     setSelectedRows(new Map<string, SqlValue>());
@@ -957,7 +959,7 @@ export function TablePane(props: {
             {/* Covers both, loading and success states */}
             <Match when={true}>
               <RecordTable
-                selectedSchema={selectedTable().schema}
+                selectedSchema={selectedTable()}
                 records={records.isSuccess ? records.data : undefined}
                 pagination={[pagination, setPagination]}
                 filter={[filter, setFilter]}

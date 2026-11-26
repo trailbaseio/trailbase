@@ -254,17 +254,22 @@ impl ConnectionManager {
     };
   }
 
-  pub async fn get_entry_for_qn(
+  pub(crate) async fn get_entry_for_admin(
     &self,
+    tenant: Option<&crate::admin::Tenant>,
     name: &trailbase_schema::db::QualifiedName,
   ) -> Result<ConnectionEntry, ConnectionError> {
+    if let Some(crate::admin::Tenant { template, id, .. }) = tenant {
+      return self.build_for_tenant(template, *id).await;
+    }
+
     return match name.database_schema.as_deref() {
       None => Ok(self.main_entry().clone()),
       Some("main") if self.state.pg_uri.is_none() => Ok(self.main_entry().clone()),
       Some("public") if self.state.pg_uri.is_some() => Ok(self.main_entry().clone()),
       Some(db) => {
         if matches!(db, "session" | "logs") {
-          return Err(ConnectionError::InvalidSetting("Private db"));
+          return Err(ConnectionError::InvalidSetting("private db"));
         }
 
         self
