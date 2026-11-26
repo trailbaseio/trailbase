@@ -159,7 +159,7 @@ pub async fn create_new_tenant(
     return Err(AuthError::Internal("Insert returned no tenant".into()));
   };
 
-  return Ok(Uuid::from_bytes(tenant.id));
+  return Ok(tenant.uuid());
 }
 
 fn find_tenant_dbs(path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {

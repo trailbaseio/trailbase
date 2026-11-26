@@ -88,16 +88,17 @@ async fn multi_tenant_record_api_create() {
   .unwrap();
 
   let (
-    tenant_x,
+    _tenant_x,
     TestUserAndLogin {
       user: user_x,
       login: user_x_tokens,
     },
   ) = add_new_tenant_with_one_member(&state, "user_x@test.org", TEMPLATE_NAME, "tenant_x").await;
+
   let (
-    tenant_y,
+    _tenant_y,
     TestUserAndLogin {
-      user: user_y,
+      user: _user_y,
       login: user_y_tokens,
     },
   ) = add_new_tenant_with_one_member(&state, "user_y@test.org", TEMPLATE_NAME, "tenant_y").await;
@@ -137,7 +138,8 @@ async fn multi_tenant_record_api_create() {
       tenant_template: Some(TEMPLATE_NAME.to_string()),
       conflict_resolution: Some(ConflictResolutionStrategy::Replace as i32),
       acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
-      create_access_rule: Some("_USER_.id = _REQ_.owner".to_string()),
+      create_access_rule: Some("_USER_.id = _REQ_.owner AND _USER_.tenant IS NOT NULL".to_string()),
+      read_access_rule: Some("_USER_.tenant IS NOT NULL".to_string()),
       ..Default::default()
     },
   )

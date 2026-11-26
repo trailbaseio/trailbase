@@ -43,6 +43,8 @@ record_apis: [
     table_name: "profiles_table"
     conflict_resolution: REPLACE
     acl_authenticated: [READ, CREATE]
+    enable_subscriptions: true,
+    # Users may only create their own profiles.
     create_access_rule: "_REQ_.user = _USER_.id"
   },
 ]
@@ -99,8 +101,9 @@ of a group `'mygroup'`:
   `VIEW`.
 * Similarly, `_ROW_` is a sub-query of the target record. It is available in
   the access rules for `READ`, `UPDATE`, and `DELETE` operations.
-* Lastly, `_USER_.id` references the id of the currently authenticated user and
-  `NULL` otherwise.
+* Lastly, `_USER_.id` and `_USER.tenant` reference the id of the currently
+  authenticated user and optionally its tenant association. Either may be
+  `NULL`.
 
 Independently, you can use `VIEW`s to filter which rows and columns of
 your `TABLE`s should be accessible.
