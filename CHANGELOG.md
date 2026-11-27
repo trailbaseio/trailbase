@@ -1,3 +1,8 @@
+## v0.37.1
+
+- Reject protocol-relative URIs in `?redirect_to=`. Reported by @orshih6 🙏.
+- Update dependencies.
+
 ## v0.37.0
 
 Early multi-tenancy support: similar to multi-DB before, API calls are routed to independent databases but rather than being static, routing happens based on a user's tenant-association.
