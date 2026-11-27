@@ -87,8 +87,17 @@ fn validate_redirect_impl(
   redirect: &str,
   dev: bool,
 ) -> Result<(), AuthError> {
-  // Always accept redirects relative to current site.
-  if redirect.starts_with("/") {
+  // Always accept redirects relative to current site. Reject protocol-relative URLs, e.g.
+  // "//bad.com" or "/\\bad.com", as well as backslashes and control characters, which
+  // browsers may strip or normalize into protocol-relative URLs.
+  if let Some(rest) = redirect.strip_prefix("/") {
+    if rest.starts_with('/')
+      || rest
+        .chars()
+        .any(|c| c == '\\' || c.is_control() || c.is_whitespace())
+    {
+      return Err(AuthError::BadRequest("invalid redirect"));
+    }
     return Ok(());
   }
 
@@ -406,6 +415,16 @@ mod tests {
     let empty_site: Option<url::Url> = None;
     assert!(validate_redirect_impl(empty_site.as_ref(), &[], &[], "", true).is_err());
     assert!(validate_redirect_impl(empty_site.as_ref(), &[], &[], "/somewhere", false).is_ok());
+    for bad in [
+      "//bad.com",
+      "/\\bad.com",
+      "/\t/bad.com",
+      "/\n/bad.com",
+      "///bad.com",
+    ] {
+      assert!(validate_redirect_impl(empty_site.as_ref(), &[], &[], bad, true).is_err());
+    }
+
     assert!(
       validate_redirect_impl(
         empty_site.as_ref(),
