@@ -1,3 +1,7 @@
+## v0.37.2
+
+- Re-enable the default features of the `regex` crate. For some users the git version parsing seems to fail. Thanks @pitermarx.
+
 ## v0.37.1
 
 - Reject protocol-relative URIs in `?redirect_to=`. Reported by @orshih6 🙏.
